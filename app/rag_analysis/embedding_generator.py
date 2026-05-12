@@ -7,8 +7,12 @@ import numpy as np
 from langchain_huggingface import HuggingFaceEmbeddings
 from sentence_transformers import SentenceTransformer
 
-from ..config import Config
-from ..database import db
+import sys
+import os
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+from config import Config
+from database import db
 
 logger = logging.getLogger(__name__)
 
@@ -31,24 +35,29 @@ class EmbeddingGenerator:
     def _initialize_model(self):
         """Initialize the embedding model."""
         try:
-            # Try using sentence-transformers directly for better control
-            self.model = SentenceTransformer(self.model_name)
-            logger.info(f"Initialized embedding model: {self.model_name}")
+            # Use HuggingFace embeddings with the specified configuration
+            model_name = "sentence-transformers/all-mpnet-base-v2"
+            model_kwargs = {"device": "cpu"}
+            encode_kwargs = {"normalize_embeddings": False}
             
-            # Update dimension based on actual model
-            self.embedding_dimension = self.model.get_sentence_embedding_dimension()
+            self.model = HuggingFaceEmbeddings(
+                model_name=model_name,
+                model_kwargs=model_kwargs,
+                encode_kwargs=encode_kwargs,
+            )
+            
+            # Update dimension for mpnet-base-v2
+            self.embedding_dimension = 768
+            logger.info(f"Initialized HuggingFace embedding model: {model_name}")
             logger.info(f"Embedding dimension: {self.embedding_dimension}")
             
         except Exception as e:
-            logger.error(f"Error initializing embedding model: {e}")
-            # Fallback to langchain implementation
+            logger.error(f"Error initializing HuggingFace embedding model: {e}")
+            # Fallback to sentence-transformers directly
             try:
-                self.model = HuggingFaceEmbeddings(
-                    model_name=self.model_name,
-                    model_kwargs={"device": "cpu"},
-                    encode_kwargs={"normalize_embeddings": False}
-                )
-                logger.info(f"Initialized fallback embedding model: {self.model_name}")
+                self.model = SentenceTransformer(self.model_name)
+                self.embedding_dimension = self.model.get_sentence_embedding_dimension()
+                logger.info(f"Initialized fallback sentence-transformers model: {self.model_name}")
             except Exception as fallback_error:
                 logger.error(f"Fallback model initialization failed: {fallback_error}")
                 raise
@@ -69,10 +78,17 @@ class EmbeddingGenerator:
         try:
             if isinstance(self.model, SentenceTransformer):
                 embeddings = self.model.encode(texts, convert_to_tensor=False)
-                return embeddings.tolist()
+                result = embeddings.tolist()
+                logger.debug(f"SentenceTransformer embeddings type: {type(result)}, first element type: {type(result[0]) if result else 'N/A'}")
+                return result
             else:
                 # Langchain implementation
                 embeddings = self.model.embed_documents(texts)
+                logger.debug(f"Langchain embeddings type: {type(embeddings)}, first element type: {type(embeddings[0]) if embeddings else 'N/A'}")
+                # Ensure we return a list of lists, not list of dicts
+                if embeddings and isinstance(embeddings[0], dict):
+                    logger.error("Received dict embeddings from Langchain, this should not happen")
+                    return []
                 return embeddings
                 
         except Exception as e:

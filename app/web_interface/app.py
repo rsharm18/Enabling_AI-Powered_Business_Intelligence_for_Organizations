@@ -45,9 +45,7 @@ class BIWebInterface:
         """Create the Gradio interface."""
         
         with gr.Blocks(
-            title="AI-Powered Business Intelligence Platform",
-            theme=gr.themes.Soft(),
-            css=self._get_custom_css()
+            title="AI-Powered Business Intelligence Platform"
         ) as interface:
             
             gr.Markdown("# 🚀 AI-Powered Business Intelligence Platform")
@@ -117,8 +115,7 @@ class BIWebInterface:
                     analysis_output = gr.Textbox(
                         label="Analysis Summary",
                         lines=15,
-                        max_lines=20,
-                        show_copy_button=True
+                        max_lines=20
                     )
                 
                 with gr.Row():
@@ -223,8 +220,7 @@ class BIWebInterface:
                     search_context = gr.Textbox(
                         label="Retrieved Context",
                         lines=10,
-                        max_lines=20,
-                        show_copy_button=True
+                        max_lines=20
                     )
         
         # Event handlers
@@ -448,6 +444,18 @@ class BIWebInterface:
         """
 
 
+def get_custom_css() -> str:
+    """Get custom CSS for the interface."""
+    return """
+    .gradio-container {
+        max-width: 1400px !important;
+    }
+    .gradio-button {
+        border-radius: 8px !important;
+    }
+    """
+
+
 def create_app() -> gr.Blocks:
     """Create and return the Gradio application."""
     interface = BIWebInterface()
@@ -466,5 +474,7 @@ def launch_app(host: str = None, port: int = None, share: bool = False):
         server_name=host,
         server_port=port,
         share=share,
-        show_error=True
+        show_error=True,
+        theme=gr.themes.Soft(),
+        css=get_custom_css()
     )

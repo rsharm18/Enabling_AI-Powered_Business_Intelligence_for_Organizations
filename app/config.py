@@ -16,8 +16,8 @@ class Config:
     OUTPUT_DIR = BASE_DIR / 'output'
     
     # AI/ML settings
-    EMBEDDING_MODEL = 'sentence-transformers/all-MiniLM-L6-v2'
-    EMBEDDING_DIMENSION = 384
+    EMBEDDING_MODEL = 'sentence-transformers/all-mpnet-base-v2'
+    EMBEDDING_DIMENSION = 768
     
     # Analysis settings
     CSV_CHUNK_SIZE = 10000

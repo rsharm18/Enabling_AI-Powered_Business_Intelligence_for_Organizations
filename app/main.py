@@ -3,6 +3,7 @@
 import logging
 import time
 import argparse
+import traceback
 from pathlib import Path
 
 from config import Config
@@ -116,22 +117,18 @@ def main():
         elif args.mode == 'process':
             logger.info("Running document processing mode")
             from rag_analysis.document_processor import DocumentProcessor
-            from rag_analysis.embedding_generator import EmbeddingGenerator
             
-            # Process documents
+            # Process documents with embeddings (using Hugging Face)
+            logger.info("Processing documents with embeddings... Start")
             processor = DocumentProcessor()
             doc_count = processor.process_and_store_documents()
-            logger.info(f"Processed {doc_count} documents")
-            
-            # Generate embeddings
-            generator = EmbeddingGenerator()
-            emb_count = generator.embed_and_store_documents()
-            logger.info(f"Generated embeddings for {emb_count} documents")
+            logger.info(f"Processed and stored {doc_count} documents with embeddings")
             
     except KeyboardInterrupt:
         logger.info("Application interrupted by user")
     except Exception as e:
         logger.error(f"Application error: {e}")
+        logger.error(f"Application error: {e}\n{traceback.format_exc()}")
     finally:
         db.disconnect()
 
