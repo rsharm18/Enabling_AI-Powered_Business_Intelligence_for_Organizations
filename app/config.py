@@ -19,6 +19,10 @@ class Config:
     EMBEDDING_MODEL = 'sentence-transformers/all-mpnet-base-v2'
     EMBEDDING_DIMENSION = 768
     
+    # LLM settings
+    GROQ_API_KEY = os.getenv('GROQ_API_KEY', '')
+    GROQ_MODEL = 'llama3-8b-8192'  # Default Groq model
+    
     # Analysis settings
     CSV_CHUNK_SIZE = 10000
     PDF_CHUNK_SIZE = 1000

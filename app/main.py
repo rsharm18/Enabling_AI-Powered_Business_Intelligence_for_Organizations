@@ -10,6 +10,7 @@ from config import Config
 from database import db
 from csv_analysis import CSVAnalyzer, CSVSchema, get_sales_schema
 from web_interface import launch_app
+from chat_interface import launch_chat_interface
 
 logging.basicConfig(level=getattr(logging, Config.LOG_LEVEL))
 logger = logging.getLogger(__name__)
@@ -77,13 +78,14 @@ def run_csv_analysis(data_file: str = None, schema_file: str = None):
 def main():
     """Main application entry point."""
     parser = argparse.ArgumentParser(description='AI-Powered Business Intelligence Platform')
-    parser.add_argument('--mode', choices=['web', 'csv', 'process'], default='web',
-                       help='Application mode: web (interface), csv (analysis), process (documents)')
+    parser.add_argument('--mode', choices=['web', 'chat', 'csv', 'process'], default='chat',
+                       help='Application mode: chat (conversational), web (full interface), csv (analysis), process (documents)')
     parser.add_argument('--data-file', help='Path to CSV file for analysis')
     parser.add_argument('--schema-file', help='Path to schema file')
     parser.add_argument('--host', default=Config.WEB_HOST, help='Web interface host')
     parser.add_argument('--port', type=int, default=Config.WEB_PORT, help='Web interface port')
     parser.add_argument('--share', action='store_true', help='Share web interface publicly')
+    parser.add_argument('--debug', action='store_true', help='Enable debug mode with live code refresh')
     
     args = parser.parse_args()
     
@@ -104,9 +106,13 @@ def main():
     
     # Run based on mode
     try:
-        if args.mode == 'web':
-            logger.info(f"Starting web interface on {args.host}:{args.port}")
-            launch_app(host=args.host, port=args.port, share=args.share)
+        if args.mode == 'chat':
+            logger.info(f"Starting chat interface on {args.host}:{args.port}")
+            launch_chat_interface(host=args.host, port=args.port, share=args.share, debug=args.debug)
+            
+        elif args.mode == 'web':
+            logger.info(f"Starting full web interface on {args.host}:{args.port}")
+            launch_app(host=args.host, port=args.port, share=args.share, debug=args.debug)
             
         elif args.mode == 'csv':
             logger.info("Running CSV analysis mode")
