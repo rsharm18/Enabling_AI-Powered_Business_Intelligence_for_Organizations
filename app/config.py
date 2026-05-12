@@ -16,8 +16,8 @@ class Config:
     OUTPUT_DIR = BASE_DIR / 'output'
     
     # AI/ML settings
-    EMBEDDING_MODEL = 'sentence-transformers/all-MiniLM-L6-v2'
-    EMBEDDING_DIMENSION = 384
+    EMBEDDING_MODEL = 'sentence-transformers/all-mpnet-base-v2'
+    EMBEDDING_DIMENSION = 768
     
     # Analysis settings
     CSV_CHUNK_SIZE = 10000
@@ -25,12 +25,15 @@ class Config:
     CHUNK_OVERLAP = 200
     
     # Vector search settings
-    SIMILARITY_THRESHOLD = 0.7
+    SIMILARITY_THRESHOLD = 0.5
     SEARCH_LIMIT = 5
     
     # Web interface settings
     WEB_HOST = '0.0.0.0'
     WEB_PORT = 7860
+    
+    # Data loading settings
+    DATA_LOAD = os.getenv('DATA_LOAD', 'false').lower() == 'true'
     
     # Logging
     LOG_LEVEL = os.getenv('LOG_LEVEL', 'INFO')

@@ -7,10 +7,13 @@ import logging
 
 from langchain_community.document_loaders import PyPDFLoader, DirectoryLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
-from langchain.docstore.document import Document
+from langchain_core.documents import Document
+import sys
+import os
 
-from ..config import Config
-from ..database import db
+from app.rag_analysis.embedding_generator import EmbeddingGenerator
+from app.config import Config
+from app.database import db
 
 logger = logging.getLogger(__name__)
 
@@ -26,10 +29,14 @@ class DocumentProcessor:
             data_directory: Directory containing PDF files
         """
         self.data_directory = Path(data_directory) if data_directory else Config.DATA_DIR / 'PDF Folder'
+        logger.info(f" Data directory: {self.data_directory}")
         self.text_splitter = RecursiveCharacterTextSplitter(
             chunk_size=Config.PDF_CHUNK_SIZE,
             chunk_overlap=Config.CHUNK_OVERLAP
         )
+        # Initialize embedding generator
+        self.embedding_generator = EmbeddingGenerator()
+        logger.info(f"Initialized embedding generator with model: {self.embedding_generator.model_name}")
     
     def load_documents(self, glob_pattern: str = "*.pdf") -> List[Document]:
         """
@@ -90,7 +97,7 @@ class DocumentProcessor:
     
     def process_and_store_documents(self, glob_pattern: str = "*.pdf") -> int:
         """
-        Load, split, and store documents in database.
+        Load, split, and store documents in database with embeddings.
         
         Args:
             glob_pattern: Pattern to match files
@@ -98,19 +105,41 @@ class DocumentProcessor:
         Returns:
             Number of documents processed
         """
+        # Check if data loading is enabled
+        if not Config.DATA_LOAD:
+            logger.info("DATA_LOAD is set to False. Skipping PDF document processing.")
+            return 0
+        
         # Load documents
+        logger.info(f"Loading documents from {self.data_directory} with pattern {glob_pattern}")
         documents = self.load_documents(glob_pattern)
         if not documents:
+            logger.warning("No documents found")
             return 0
-        
+
+        logger.info(f"Loaded {len(documents)} documents")
         # Split documents
         chunks = self.split_documents(documents)
+        logger.info(f"Split {len(chunks)} documents into chunks")
         if not chunks:
+            logger.warning("No chunks created")
             return 0
         
-        # Store in database
-        stored_count = 0
-        for doc in documents:
+        # Store in database with embeddings using bulk insertion
+        
+        # Generate embeddings for all documents at once using EmbeddingGenerator
+        texts = [doc.page_content for doc in documents]
+        embeddings = self.embedding_generator.generate_embeddings(texts)
+        logger.info(f"Generated embeddings for {len(documents)} documents")
+        
+        # Debug: Check embedding format
+        if embeddings:
+            logger.info(f"Embedding type: {type(embeddings[0])}")
+            logger.info(f"First embedding length: {len(embeddings[0]) if isinstance(embeddings[0], list) else 'N/A'}")
+        
+        # Prepare data for bulk insertion
+        documents_data = []
+        for i, doc in enumerate(documents):
             # Store document metadata
             metadata = {
                 'source': doc.metadata.get('source', ''),
@@ -118,17 +147,37 @@ class DocumentProcessor:
                 'total_pages': doc.metadata.get('total_pages', 0)
             }
             
-            # Store document (embedding will be added later)
-            doc_id = db.store_embedding(
-                content=doc.page_content,
-                metadata=metadata,
-                embedding=[]  # Placeholder, will be updated with actual embedding
-            )
+            # Clean content to remove NUL characters
+            clean_content = doc.page_content.replace('\x00', '')
             
-            if doc_id:
-                stored_count += 1
+            documents_data.append({
+                'content': clean_content,
+                'metadata': metadata,
+                'embedding': embeddings[i]
+            })
         
-        logger.info(f"Processed and stored {stored_count} documents")
+        # Bulk insert all documents
+        stored_count = db.store_embeddings_bulk(documents_data)
+        
+        # Generate and store chunks with embeddings
+        chunk_texts = [chunk.page_content for chunk in chunks]
+        chunk_embeddings = self.embedding_generator.generate_embeddings(chunk_texts)
+        logger.info(f"Generated embeddings for {len(chunks)} chunks")
+        
+        # Prepare chunks data for bulk insertion
+        chunks_data = []
+        for i, chunk in enumerate(chunks):
+            chunks_data.append({
+                'document_id': 1,  # Will be updated after we get the actual document IDs
+                'chunk_text': chunk.page_content.replace('\x00', ''),
+                'chunk_index': i,
+                'embedding': chunk_embeddings[i]
+            })
+        
+        # Bulk insert all chunks
+        stored_chunks = db.store_chunks_bulk(chunks_data)
+        
+        logger.info(f"Processed and stored {stored_count} documents and {stored_chunks} chunks with embeddings")
         return stored_count
     
     def get_document_stats(self) -> Dict[str, Any]:

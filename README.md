@@ -240,6 +240,44 @@ GROQ_API_KEY=your_groq_api_key_here
 
 The application uses PostgreSQL with pgvector for vector storage. The database is automatically initialized with the necessary tables and indexes when using Docker Compose.
 
+## Makefile Commands
+
+The project includes a Makefile to simplify common development tasks. Run `make help` to see all available commands.
+
+### Application Modes
+
+- **`make web`** - Start the web interface on port 7860 (automatically kills existing process if port is in use)
+- **`make csv`** - Run CSV analysis mode
+- **`make process`** - Run document processing mode
+
+### Service Management
+
+- **`make stop`** - Stop the application (kills process on port 7860)
+- **`make kill-port`** - Force kill any process on port 7860
+- **`make start-db`** - Start PostgreSQL database using Docker Compose
+- **`make stop-db`** - Stop PostgreSQL database using Docker Compose
+
+### Maintenance
+
+- **`make clean`** - Clean up Python cache files (.pyc files and __pycache__ directories)
+- **`make help`** - Display all available make commands
+
+### Example Workflow
+
+```bash
+# Start the database
+make start-db
+
+# Run the web interface
+make web
+
+# When done, stop the application
+make stop
+
+# Stop the database
+make stop-db
+```
+
 ## Usage
 
 1. **Upload CSV files** for data analysis and visualization
