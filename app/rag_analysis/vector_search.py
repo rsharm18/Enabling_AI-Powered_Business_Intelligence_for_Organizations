@@ -3,9 +3,9 @@
 import logging
 from typing import List, Dict, Any, Optional, Tuple
 
-from ..config import Config
-from ..database import db
-from .embedding_generator import EmbeddingGenerator
+from app.config import Config
+from app.database import db
+from app.rag_analysis.embedding_generator import EmbeddingGenerator
 
 logger = logging.getLogger(__name__)
 
@@ -129,10 +129,10 @@ class VectorSearch:
         
         try:
             # Get document results
-            doc_results = self.search_documents(query, limit=int(limit * document_weight))
+            doc_results = self.search_documents(query, limit=int(limit * document_weight), threshold=self.similarity_threshold)
             
             # Get chunk results
-            chunk_results = self.search_chunks(query, limit=int(limit * chunk_weight))
+            chunk_results = self.search_chunks(query, limit=int(limit * chunk_weight), threshold=self.similarity_threshold)
             
             # Combine and rank results
             combined_results = []
@@ -275,7 +275,7 @@ class VectorSearch:
             doc_query = """
             SELECT COUNT(*) as count
             FROM document_embeddings
-            WHERE embedding IS NOT NULL AND embedding != ''::vector
+            WHERE embedding IS NOT NULL
             """
             doc_count = db.execute_query(doc_query)
             
@@ -283,7 +283,7 @@ class VectorSearch:
             chunk_query = """
             SELECT COUNT(*) as count
             FROM document_chunks
-            WHERE embedding IS NOT NULL AND embedding != ''::vector
+            WHERE embedding IS NOT NULL
             """
             chunk_count = db.execute_query(chunk_query)
             

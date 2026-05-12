@@ -11,12 +11,9 @@ from langchain_core.documents import Document
 import sys
 import os
 
-from rag_analysis.embedding_generator import EmbeddingGenerator
-
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-
-from config import Config
-from database import db
+from app.rag_analysis.embedding_generator import EmbeddingGenerator
+from app.config import Config
+from app.database import db
 
 logger = logging.getLogger(__name__)
 
@@ -108,6 +105,11 @@ class DocumentProcessor:
         Returns:
             Number of documents processed
         """
+        # Check if data loading is enabled
+        if not Config.DATA_LOAD:
+            logger.info("DATA_LOAD is set to False. Skipping PDF document processing.")
+            return 0
+        
         # Load documents
         logger.info(f"Loading documents from {self.data_directory} with pattern {glob_pattern}")
         documents = self.load_documents(glob_pattern)

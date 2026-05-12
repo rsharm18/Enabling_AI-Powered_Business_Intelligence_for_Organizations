@@ -6,9 +6,9 @@ from typing import List, Dict, Any, Optional, Tuple
 import pandas as pd
 from pathlib import Path
 
-from config import Config
-from database import db
-from csv_analysis import CSVAnalyzer, CSVSchema
+from app.config import Config
+from app.database import db
+from app.csv_analysis import CSVAnalyzer, CSVSchema
 
 logger = logging.getLogger(__name__)
 
@@ -30,9 +30,9 @@ class BIWebInterface:
         """Initialize RAG components if not already initialized."""
         if self.document_processor is None:
             try:
-                from rag_analysis.document_processor import DocumentProcessor
-                from rag_analysis.embedding_generator import EmbeddingGenerator
-                from rag_analysis.vector_search import VectorSearch
+                from app.rag_analysis.document_processor import DocumentProcessor
+                from app.rag_analysis.embedding_generator import EmbeddingGenerator
+                from app.rag_analysis.vector_search import VectorSearch
                 
                 self.document_processor = DocumentProcessor()
                 self.embedding_generator = EmbeddingGenerator()
@@ -384,20 +384,39 @@ class BIWebInterface:
                 'analysis_results': analysis_count[0]['count'] if analysis_count else 0
             }
             
-            # Initialize RAG components
-            self._initialize_rag_components()
+            # Only initialize RAG components if needed and not already initialized
+            embedding_stats = {}
+            search_stats = {}
             
-            # Embedding stats
-            embedding_stats = self.embedding_generator.get_embedding_stats()
-            
-            # Search stats
-            search_stats = self.vector_search.get_search_stats()
+            # Only get RAG stats if we have documents (otherwise no need to load models)
+            if db_stats.get('documents', 0) > 0 or db_stats.get('chunks', 0) > 0:
+                try:
+                    # Only initialize if not already done
+                    if self.embedding_generator is None:
+                        self._initialize_rag_components()
+                    
+                    # Embedding stats
+                    if self.embedding_generator:
+                        embedding_stats = self.embedding_generator.get_embedding_stats()
+                    
+                    # Search stats
+                    if self.vector_search:
+                        search_stats = self.vector_search.get_search_stats()
+                        
+                except Exception as rag_error:
+                    logger.error(f"RAG components error: {rag_error}")
+                    embedding_stats = {'error': str(rag_error)}
+                    search_stats = {'error': str(rag_error)}
+            else:
+                # No documents, no need to load models
+                embedding_stats = {'message': 'No documents processed yet'}
+                search_stats = {'message': 'No documents processed yet'}
             
             return db_stats, embedding_stats, search_stats
             
         except Exception as e:
             logger.error(f"Database status error: {e}")
-            return {}, {}, {}
+            return {'error': str(e)}, {'error': str(e)}, {'error': str(e)}
     
     def _generate_csv_summary(self, results: Dict[str, Any]) -> str:
         """Generate a summary of CSV analysis results."""

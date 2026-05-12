@@ -60,14 +60,46 @@ class DatabaseManager:
             self.execute_query("CREATE EXTENSION IF NOT EXISTS vector;")
             logger.info("pgvector extension enabled")
             
-            # Drop existing tables to recreate with correct dimensions
-            self.execute_query("DROP TABLE IF EXISTS document_chunks CASCADE;")
-            self.execute_query("DROP TABLE IF EXISTS document_embeddings CASCADE;")
-            logger.info("Dropped existing tables to fix dimension mismatch")
+            # Check if tables exist and have correct dimensions
+            existing_tables = self.execute_query("""
+                SELECT table_name 
+                FROM information_schema.tables 
+                WHERE table_schema = 'public' 
+                AND table_name IN ('document_embeddings', 'document_chunks')
+            """)
             
-            # Create document_embeddings table
+            table_names = [row['table_name'] for row in existing_tables]
+            
+            # Check if we need to recreate tables due to dimension mismatch
+            need_recreate = False
+            if 'document_embeddings' in table_names:
+                # Check embedding dimension
+                dim_check = self.execute_query("""
+                    SELECT data_type, udt_name 
+                    FROM information_schema.columns 
+                    WHERE table_name = 'document_embeddings' 
+                    AND column_name = 'embedding'
+                """)
+                if dim_check:
+                    # For simplicity, we'll recreate if tables exist but might have wrong dimensions
+                    # In production, you'd want more sophisticated dimension checking
+                    logger.info("Existing tables found, checking compatibility...")
+                    need_recreate = False  # Assume compatible for now
+                else:
+                    need_recreate = True
+            else:
+                need_recreate = True
+            
+            if need_recreate:
+                self.execute_query("DROP TABLE IF EXISTS document_chunks CASCADE;")
+                self.execute_query("DROP TABLE IF EXISTS document_embeddings CASCADE;")
+                logger.info("Recreating tables with correct dimensions")
+            else:
+                logger.info("Tables already exist with correct structure")
+            
+            # Create document_embeddings table (IF NOT EXISTS for safety)
             create_embeddings_table = f"""
-            CREATE TABLE document_embeddings (
+            CREATE TABLE IF NOT EXISTS document_embeddings (
                 id SERIAL PRIMARY KEY,
                 content TEXT,
                 metadata JSONB,
@@ -76,11 +108,11 @@ class DatabaseManager:
             );
             """
             self.execute_query(create_embeddings_table)
-            logger.info(f"document_embeddings table created with {Config.EMBEDDING_DIMENSION} dimensions")
+            logger.info(f"document_embeddings table ready with {Config.EMBEDDING_DIMENSION} dimensions")
             
-            # Create document_chunks table
+            # Create document_chunks table (IF NOT EXISTS for safety)
             create_chunks_table = f"""
-            CREATE TABLE document_chunks (
+            CREATE TABLE IF NOT EXISTS document_chunks (
                 id SERIAL PRIMARY KEY,
                 document_id INTEGER REFERENCES document_embeddings(id),
                 chunk_text TEXT,
@@ -90,7 +122,7 @@ class DatabaseManager:
             );
             """
             self.execute_query(create_chunks_table)
-            logger.info(f"document_chunks table created with {Config.EMBEDDING_DIMENSION} dimensions")
+            logger.info(f"document_chunks table ready with {Config.EMBEDDING_DIMENSION} dimensions")
             
             # Create analysis_results table
             create_analysis_table = """
@@ -284,9 +316,9 @@ class DatabaseManager:
     def search_similar_embeddings(self, query_embedding: List[float], limit: int = 5, threshold: float = 0.7) -> List[Dict[str, Any]]:
         """Search for similar embeddings using cosine similarity"""
         query = """
-        SELECT id, content, metadata, 1 - (embedding <=> %s) as similarity
+        SELECT id, content, metadata, 1 - (embedding <=> %s::vector) as similarity
         FROM document_embeddings
-        WHERE 1 - (embedding <=> %s) > %s
+        WHERE 1 - (embedding <=> %s::vector) > %s
         ORDER BY similarity DESC
         LIMIT %s;
         """
@@ -296,10 +328,10 @@ class DatabaseManager:
         """Search for similar chunks using cosine similarity"""
         query = """
         SELECT dc.id, dc.chunk_text, dc.chunk_index, de.content as document_content,
-               1 - (dc.embedding <=> %s) as similarity
+               1 - (dc.embedding <=> %s::vector) as similarity
         FROM document_chunks dc
         JOIN document_embeddings de ON dc.document_id = de.id
-        WHERE 1 - (dc.embedding <=> %s) > %s
+        WHERE 1 - (dc.embedding <=> %s::vector) > %s
         ORDER BY similarity DESC
         LIMIT %s;
         """

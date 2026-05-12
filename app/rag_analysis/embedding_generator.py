@@ -7,12 +7,8 @@ import numpy as np
 from langchain_huggingface import HuggingFaceEmbeddings
 from sentence_transformers import SentenceTransformer
 
-import sys
-import os
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-
-from config import Config
-from database import db
+from app.config import Config
+from app.database import db
 
 logger = logging.getLogger(__name__)
 
@@ -239,7 +235,7 @@ class EmbeddingGenerator:
         doc_query = """
         SELECT 
             COUNT(*) as total_docs,
-            COUNT(CASE WHEN embedding IS NOT NULL AND embedding != '{}'::vector THEN 1 END) as embedded_docs
+            COUNT(CASE WHEN embedding IS NOT NULL THEN 1 END) as embedded_docs
         FROM document_embeddings
         """
         doc_stats = db.execute_query(doc_query)
@@ -248,7 +244,7 @@ class EmbeddingGenerator:
         chunk_query = """
         SELECT 
             COUNT(*) as total_chunks,
-            COUNT(CASE WHEN embedding IS NOT NULL AND embedding != '{}'::vector THEN 1 END) as embedded_chunks
+            COUNT(CASE WHEN embedding IS NOT NULL THEN 1 END) as embedded_chunks
         FROM document_chunks
         """
         chunk_stats = db.execute_query(chunk_query)
