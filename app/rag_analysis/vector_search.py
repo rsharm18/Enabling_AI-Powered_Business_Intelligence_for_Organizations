@@ -6,6 +6,7 @@ from typing import List, Dict, Any, Optional, Tuple
 from app.config import Config
 from app.database import db
 from app.rag_analysis.embedding_generator import EmbeddingGenerator
+from rag_analysis.keyword_booster import calculate_keyword_boost
 
 logger = logging.getLogger(__name__)
 
@@ -137,6 +138,7 @@ class VectorSearch:
                     'chunk_text': result['chunk_text'],
                     'chunk_index': result['chunk_index'],
                     'document_content': result.get('document_content', ''),
+                    'document_metadata': result.get('document_metadata', {}),
                     'similarity': result['similarity']
                 })
             
@@ -147,10 +149,13 @@ class VectorSearch:
             logger.error(f"Error in chunk search: {e}")
             return []
     
-    def hybrid_search(self, query: str, document_weight: float = 0.7,
-                     chunk_weight: float = 0.3, limit: Optional[int] = None) -> List[Dict[str, Any]]:
+    def hybrid_search(self, query: str, document_weight: float = 0.3,
+                     chunk_weight: float = 0.7, limit: Optional[int] = None) -> List[Dict[str, Any]]:
         """
         Perform hybrid search combining document and chunk results.
+
+        Adds keyword/entity boosting so exact terms like 'Widget A'
+        outrank semantically similar but wrong terms like 'Widget D'.
         
         Args:
             query: Search query text
@@ -177,17 +182,36 @@ class VectorSearch:
             for result in doc_results:
                 result['type'] = 'document'
                 result['adjusted_similarity'] = result['similarity'] * document_weight
+                result["keyword_boost"] = calculate_keyword_boost(query, result)
+                result["final_score"] = result["adjusted_similarity"] + result["keyword_boost"]
                 combined_results.append(result)
             
             # Add chunk results with adjusted scores
             for result in chunk_results:
                 result['type'] = 'chunk'
                 result['adjusted_similarity'] = result['similarity'] * chunk_weight
+                result["keyword_boost"] = calculate_keyword_boost(query, result)
+                result["final_score"] = result["adjusted_similarity"] + result["keyword_boost"]
                 combined_results.append(result)
             
             # Sort by adjusted similarity
             combined_results.sort(key=lambda x: x['adjusted_similarity'], reverse=True)
-            
+
+            logger.info(
+                "Hybrid search for query=%r returned %d results. Top scores=%s",
+                query,
+                len(combined_results),
+                [
+                    {
+                        "type": r.get("type"),
+                        "similarity": round(r.get("similarity", 0), 4),
+                        "keyword_boost": round(r.get("keyword_boost", 0), 4),
+                        "final_score": round(r.get("final_score", 0), 4),
+                    }
+                    for r in combined_results[:3]
+                ]
+            )
+
             # Return top results
             return combined_results[:limit]
             

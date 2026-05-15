@@ -31,6 +31,8 @@ class AgentState(TypedDict):
     context: Optional[str]
     query: Optional[str]
     search_results: Optional[List[Dict[str, Any]]]
+    route: Optional[str]
+    bi_context: Optional[str]
 
 
 class ConversationalAgent:
@@ -103,8 +105,8 @@ class ConversationalAgent:
                             content = result.get('chunk_text', '')
                         
                         # Truncate long content
-                        if len(content) > 400:
-                            content = content[:400] + "..."
+                        if len(content) > 4000:
+                            content = content[:4000] + "..."
                         
                         context_parts.append(f"[Source {i}] {content}")
                     
@@ -207,17 +209,44 @@ Answer:"""
                     **state,
                     "messages": state["messages"] + [error_message]
                 }
-        
+
+        # def classify_question(state: AgentState) -> AgentState:
+        #     query = state["messages"][-1].content.lower()
+        #
+        #     bi_keywords = [
+        #         "sales", "revenue", "profit", "region", "product",
+        #         "customer", "segment", "trend", "median", "average",
+        #         "mean", "standard deviation", "std", "top", "bottom"
+        #     ]
+        #
+        #     route = "bi" if any(word in query for word in bi_keywords) else "rag"
+        #
+        #     return {
+        #         **state,
+        #         "query": state["messages"][-1].content,
+        #         "route": route
+        #     }
         # Build the graph
         workflow = StateGraph(AgentState)
         
         # Add nodes
+        # workflow.add_node("classify", classify_question)
         workflow.add_node("retrieve", retrieve_documents)
         workflow.add_node("generate", generate_response)
         
         # Add edges
+        # workflow.set_entry_point("classify")
+        # workflow.add_conditional_edge(
+        #     "classify",
+        #     lambda state: state["route"],
+        #     {
+        #         "rag": "retrieve",
+        #         "bi": "analyze_csv",
+        #     },
+        # )
         workflow.set_entry_point("retrieve")
         workflow.add_edge("retrieve", "generate")
+        # workflow.add_edge("analyze_csv", "generate")
         workflow.add_edge("generate", END)
         
         # Compile the graph
