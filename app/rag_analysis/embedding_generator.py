@@ -3,6 +3,8 @@
 import logging
 from typing import List, Dict, Any, Optional
 import numpy as np
+import pickle
+import os
 
 from langchain_huggingface import HuggingFaceEmbeddings
 from sentence_transformers import SentenceTransformer
@@ -16,9 +18,12 @@ logger = logging.getLogger(__name__)
 class EmbeddingGenerator:
     """Handles embedding generation for documents and queries."""
     
+    # Class-level cache for model instance
+    _model_cache = {}
+    
     def __init__(self, model_name: Optional[str] = None):
         """
-        Initialize embedding generator.
+        Initialize embedding generator with lazy loading and caching.
         
         Args:
             model_name: Name of the embedding model to use
@@ -26,13 +31,69 @@ class EmbeddingGenerator:
         self.model_name = model_name or Config.EMBEDDING_MODEL
         self.embedding_dimension = Config.EMBEDDING_DIMENSION
         self.model = None
-        self._initialize_model()
+        self._model_initialized = False
+        # Don't initialize model immediately - will be loaded on first use
+    
+    def _ensure_model_initialized(self):
+        """Ensure model is initialized before use."""
+        if not self._model_initialized:
+            logger.info("Initializing embedding model (lazy loading)...")
+            self._initialize_model()
+            self._model_initialized = True
+            logger.info("Embedding model initialized successfully")
+    
+    def _get_pickle_path(self, model_name: str) -> str:
+        """Get the pickle file path for a given model name."""
+        # Create a safe filename from model name
+        safe_name = model_name.replace("/", "_").replace("-", "_")
+        return os.path.join(Config.MODELS_DIR, f"{safe_name}.pkl")
+    
+    def _save_model_to_pickle(self, model, model_name: str):
+        """Save model to pickle file for faster loading."""
+        pickle_path = self._get_pickle_path(model_name)
+        try:
+            with open(pickle_path, 'wb') as f:
+                pickle.dump(model, f)
+            logger.info(f"Saved model to pickle: {pickle_path}")
+        except Exception as e:
+            logger.warning(f"Failed to save model to pickle: {e}")
+    
+    def _load_model_from_pickle(self, model_name: str):
+        """Load model from pickle file if it exists."""
+        pickle_path = self._get_pickle_path(model_name)
+        if os.path.exists(pickle_path):
+            try:
+                with open(pickle_path, 'rb') as f:
+                    model = pickle.load(f)
+                logger.info(f"Loaded model from pickle: {pickle_path}")
+                return model
+            except Exception as e:
+                logger.warning(f"Failed to load model from pickle: {e}")
+                return None
+        return None
     
     def _initialize_model(self):
-        """Initialize the embedding model."""
+        """Initialize the embedding model with caching."""
+        # Check if model is already cached
+        cache_key = self.model_name
+        if cache_key in self._model_cache:
+            logger.info(f"Using cached embedding model: {cache_key}")
+            self.model = self._model_cache[cache_key]
+            self.embedding_dimension = 768
+            return
+        
+        # Try to load from pickle first
+        model_name = "sentence-transformers/all-mpnet-base-v2"
+        pickled_model = self._load_model_from_pickle(model_name)
+        if pickled_model is not None:
+            self.model = pickled_model
+            self.embedding_dimension = 768
+            self._model_cache[cache_key] = self.model
+            logger.info(f"Using pickled model: {model_name}")
+            return
+        
         try:
             # Use HuggingFace embeddings with the specified configuration
-            model_name = "sentence-transformers/all-mpnet-base-v2"
             model_kwargs = {"device": "cpu"}
             encode_kwargs = {"normalize_embeddings": False}
             
@@ -47,6 +108,13 @@ class EmbeddingGenerator:
             logger.info(f"Initialized HuggingFace embedding model: {model_name}")
             logger.info(f"Embedding dimension: {self.embedding_dimension}")
             
+            # Cache the model for future use
+            self._model_cache[cache_key] = self.model
+            logger.info(f"Cached embedding model: {cache_key}")
+            
+            # Save to pickle for faster loading next time
+            self._save_model_to_pickle(self.model, model_name)
+            
         except Exception as e:
             logger.error(f"Error initializing HuggingFace embedding model: {e}")
             # Fallback to sentence-transformers directly
@@ -54,6 +122,10 @@ class EmbeddingGenerator:
                 self.model = SentenceTransformer(self.model_name)
                 self.embedding_dimension = self.model.get_sentence_embedding_dimension()
                 logger.info(f"Initialized fallback sentence-transformers model: {self.model_name}")
+                # Cache the fallback model as well
+                self._model_cache[cache_key] = self.model
+                # Save fallback model to pickle as well
+                self._save_model_to_pickle(self.model, self.model_name)
             except Exception as fallback_error:
                 logger.error(f"Fallback model initialization failed: {fallback_error}")
                 raise
@@ -70,6 +142,9 @@ class EmbeddingGenerator:
         """
         if not texts:
             return []
+        
+        # Ensure model is initialized before use
+        self._ensure_model_initialized()
         
         try:
             if isinstance(self.model, SentenceTransformer):
@@ -101,6 +176,9 @@ class EmbeddingGenerator:
         Returns:
             Embedding vector
         """
+        # Ensure model is initialized before use
+        self._ensure_model_initialized()
+        
         try:
             if isinstance(self.model, SentenceTransformer):
                 embedding = self.model.encode(text, convert_to_tensor=False)

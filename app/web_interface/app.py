@@ -481,7 +481,7 @@ def create_app() -> gr.Blocks:
     return interface.create_interface()
 
 
-def launch_app(host: str = None, port: int = None, share: bool = False):
+def launch_app(host: str = None, port: int = None, share: bool = False, debug: bool = False):
     """Launch the web application."""
     host = host or Config.WEB_HOST
     port = port or Config.WEB_PORT
@@ -495,5 +495,6 @@ def launch_app(host: str = None, port: int = None, share: bool = False):
         share=share,
         show_error=True,
         theme=gr.themes.Soft(),
-        css=get_custom_css()
+        css=get_custom_css(),
+        debug=debug
     )

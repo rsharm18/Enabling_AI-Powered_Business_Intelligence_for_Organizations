@@ -4,7 +4,8 @@ help:
 	@echo "AI-Powered Business Intelligence Platform - Make Commands"
 	@echo ""
 	@echo "Application Modes:"
-	@echo "  make web        - Start web interface (port 7860)"
+	@echo "  make web        - Start chat interface (port 7860)"
+	@echo "  make debug      - Start chat interface in debug mode with live code refresh"
 	@echo "  make csv        - Run CSV analysis mode"
 	@echo "  make process    - Run document processing mode"
 	@echo ""
@@ -21,12 +22,20 @@ help:
 	@echo "  make clean      - Clean up Python cache files"
 
 web:
-	@echo "Starting web interface..."
+	@echo "Starting chat interface..."
 	@if lsof -ti:7860 >/dev/null 2>&1; then \
 		echo "Port 7860 is in use, killing process..."; \
 		kill -9 $$(lsof -ti:7860) 2>/dev/null || true; \
 	fi
-	@PYTHONPATH=/mnt/m/github_project/Python/Enabling_AI-Powered_Business_Intelligence_for_Organizations .venv/bin/python app/main.py --mode web
+	@PYTHONPATH=/mnt/m/github_project/Python/Enabling_AI-Powered_Business_Intelligence_for_Organizations .venv/bin/python app/main.py --mode chat
+
+debug:
+	@echo "Starting chat interface in lightweight debug mode..."
+	@if lsof -ti:7860 >/dev/null 2>&1; then \
+		echo "Port 7860 is in use, killing process..."; \
+		kill -9 $$(lsof -ti:7860) 2>/dev/null || true; \
+	fi
+	@PYTHONPATH=/mnt/m/github_project/Python/Enabling_AI-Powered_Business_Intelligence_for_Organizations .venv/bin/python app/main.py --mode chat --debug-light
 
 csv:
 	@echo "Starting CSV analysis mode..."
