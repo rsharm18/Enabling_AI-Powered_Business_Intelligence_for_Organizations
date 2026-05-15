@@ -21,7 +21,7 @@ class Config:
     EMBEDDING_DIMENSION = 768
     
     # LLM settings
-    GROQ_API_KEY = os.getenv('GROQ_API_KEY', '')
+    GROQ_API_KEY = os.getenv('GROQ_API_KEY')
     GROQ_MODEL = 'qwen/qwen3-32b'  # Default Groq model
     
     # Analysis settings
