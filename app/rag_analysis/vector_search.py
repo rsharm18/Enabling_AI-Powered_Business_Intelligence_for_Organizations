@@ -23,6 +23,36 @@ class VectorSearch:
         self.embedding_generator = embedding_generator or EmbeddingGenerator()
         self.similarity_threshold = Config.SIMILARITY_THRESHOLD
         self.search_limit = Config.SEARCH_LIMIT
+
+    def _log_threshold_miss(self, query: str, result_type: str, top_results: List[Dict[str, Any]]) -> None:
+        """Log top raw vector scores when thresholded search finds nothing."""
+        if not top_results:
+            logger.warning("No %s candidates found for query %r, even without threshold", result_type, query)
+            return
+
+        logger.warning(
+            "No %s results passed the similarity threshold for query %r. "
+            "Top raw candidates without threshold:",
+            result_type,
+            query
+        )
+
+        for result in top_results:
+            metadata = result.get('metadata') or result.get('document_metadata') or {}
+            if result_type == 'document':
+                preview = result.get('content', '')
+            else:
+                preview = result.get('chunk_text', '')
+
+            logger.warning(
+                "%s candidate id=%s similarity=%.4f section=%s type=%s preview=%s",
+                result_type,
+                result.get('id'),
+                result.get('similarity', 0),
+                metadata.get('analysis_section'),
+                metadata.get('type'),
+                preview[:180].replace('\n', ' ')
+            )
     
     def search_documents(self, query: str, limit: Optional[int] = None, 
                         threshold: Optional[float] = None) -> List[Dict[str, Any]]:
@@ -49,7 +79,10 @@ class VectorSearch:
             
             # Search in database
             results = db.search_similar_embeddings(query_embedding, limit, threshold)
-            
+            if not results:
+                top_results = db.search_top_embeddings(query_embedding, limit=5)
+                self._log_threshold_miss(query, 'document', top_results)
+
             # Format results
             formatted_results = []
             for result in results:
@@ -92,7 +125,10 @@ class VectorSearch:
             
             # Search in database
             results = db.search_similar_chunks(query_embedding, limit, threshold)
-            
+            if not results:
+                top_results = db.search_top_chunks(query_embedding, limit=5)
+                self._log_threshold_miss(query, 'chunk', top_results)
+
             # Format results
             formatted_results = []
             for result in results:

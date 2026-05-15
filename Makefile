@@ -30,12 +30,12 @@ web:
 	@PYTHONPATH=/mnt/m/github_project/Python/Enabling_AI-Powered_Business_Intelligence_for_Organizations .venv/bin/python app/main.py --mode chat
 
 debug:
-	@echo "Starting chat interface in debug mode..."
+	@echo "Starting chat interface in lightweight debug mode..."
 	@if lsof -ti:7860 >/dev/null 2>&1; then \
 		echo "Port 7860 is in use, killing process..."; \
 		kill -9 $$(lsof -ti:7860) 2>/dev/null || true; \
 	fi
-	@PYTHONPATH=/mnt/m/github_project/Python/Enabling_AI-Powered_Business_Intelligence_for_Organizations .venv/bin/python app/main.py --mode chat --debug
+	@PYTHONPATH=/mnt/m/github_project/Python/Enabling_AI-Powered_Business_Intelligence_for_Organizations .venv/bin/python app/main.py --mode chat --debug-light
 
 csv:
 	@echo "Starting CSV analysis mode..."

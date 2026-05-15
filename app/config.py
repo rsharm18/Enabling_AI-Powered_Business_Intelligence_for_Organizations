@@ -14,14 +14,15 @@ class Config:
     BASE_DIR = Path(__file__).parent.parent
     DATA_DIR = BASE_DIR / 'data'
     OUTPUT_DIR = BASE_DIR / 'output'
+    MODELS_DIR = BASE_DIR / 'models'
     
     # AI/ML settings
     EMBEDDING_MODEL = 'sentence-transformers/all-mpnet-base-v2'
     EMBEDDING_DIMENSION = 768
     
     # LLM settings
-    GROQ_API_KEY = os.getenv('GROQ_API_KEY', '')
-    GROQ_MODEL = 'llama3-8b-8192'  # Default Groq model
+    GROQ_API_KEY = os.getenv('GROQ_API_KEY', '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')
+    GROQ_MODEL = 'qwen/qwen3-32b'  # Default Groq model
     
     # Analysis settings
     CSV_CHUNK_SIZE = 10000
@@ -29,8 +30,8 @@ class Config:
     CHUNK_OVERLAP = 200
     
     # Vector search settings
-    SIMILARITY_THRESHOLD = 0.5
-    SEARCH_LIMIT = 5
+    SIMILARITY_THRESHOLD = 0.2
+    SEARCH_LIMIT = 20
     
     # Web interface settings
     WEB_HOST = '0.0.0.0'
@@ -58,3 +59,4 @@ class Config:
         """Create necessary directories if they don't exist."""
         cls.DATA_DIR.mkdir(exist_ok=True)
         cls.OUTPUT_DIR.mkdir(exist_ok=True)
+        cls.MODELS_DIR.mkdir(exist_ok=True)

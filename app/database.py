@@ -323,6 +323,17 @@ class DatabaseManager:
         LIMIT %s;
         """
         return self.execute_query(query, (query_embedding, query_embedding, threshold, limit))
+
+    def search_top_embeddings(self, query_embedding: List[float], limit: int = 5) -> List[Dict[str, Any]]:
+        """Search top document embeddings without applying a similarity threshold."""
+        query = """
+        SELECT id, content, metadata, 1 - (embedding <=> %s::vector) as similarity
+        FROM document_embeddings
+        WHERE embedding IS NOT NULL
+        ORDER BY similarity DESC
+        LIMIT %s;
+        """
+        return self.execute_query(query, (query_embedding, limit))
     
     def search_similar_chunks(self, query_embedding: List[float], limit: int = 5, threshold: float = 0.7) -> List[Dict[str, Any]]:
         """Search for similar chunks using cosine similarity"""
@@ -336,6 +347,20 @@ class DatabaseManager:
         LIMIT %s;
         """
         return self.execute_query(query, (query_embedding, query_embedding, threshold, limit))
+
+    def search_top_chunks(self, query_embedding: List[float], limit: int = 5) -> List[Dict[str, Any]]:
+        """Search top document chunks without applying a similarity threshold."""
+        query = """
+        SELECT dc.id, dc.chunk_text, dc.chunk_index, de.content as document_content,
+               de.metadata as document_metadata,
+               1 - (dc.embedding <=> %s::vector) as similarity
+        FROM document_chunks dc
+        JOIN document_embeddings de ON dc.document_id = de.id
+        WHERE dc.embedding IS NOT NULL
+        ORDER BY similarity DESC
+        LIMIT %s;
+        """
+        return self.execute_query(query, (query_embedding, limit))
     
     def store_analysis_result(self, analysis_type: str, file_name: str, results: Dict[str, Any]) -> Optional[int]:
         """Store analysis results"""

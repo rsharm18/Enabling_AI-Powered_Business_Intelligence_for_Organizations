@@ -7,16 +7,12 @@ import traceback
 from pathlib import Path
 
 from config import Config
-from database import db
-from csv_analysis import CSVAnalyzer, CSVSchema, get_sales_schema
-from web_interface import launch_app
-from chat_interface import launch_chat_interface
 
 logging.basicConfig(level=getattr(logging, Config.LOG_LEVEL))
 logger = logging.getLogger(__name__)
 
 
-def initialize_database_with_retry(max_retries=5, retry_delay=10):
+def initialize_database_with_retry(db, max_retries=5, retry_delay=10):
     """Initialize database with retry logic."""
     for attempt in range(max_retries):
         logger.info(f"Attempting database initialization (attempt {attempt + 1}/{max_retries})")
@@ -36,6 +32,9 @@ def initialize_database_with_retry(max_retries=5, retry_delay=10):
 def run_csv_analysis(data_file: str = None, schema_file: str = None):
     """Run CSV analysis on specified file."""
     try:
+        from csv_analysis import CSVAnalyzer, CSVSchema, get_sales_schema
+        from database import db
+
         # Determine data file
         if not data_file:
             data_file = Config.DATA_DIR / 'sales_data.csv'
@@ -86,16 +85,19 @@ def main():
     parser.add_argument('--port', type=int, default=Config.WEB_PORT, help='Web interface port')
     parser.add_argument('--share', action='store_true', help='Share web interface publicly')
     parser.add_argument('--debug', action='store_true', help='Enable debug mode with live code refresh')
+    parser.add_argument('--debug-light', action='store_true', help='Enable lightweight debug mode without Gradio overhead')
     
     args = parser.parse_args()
     
     print("=" * 60)
     print("AI-POWERED BUSINESS INTELLIGENCE PLATFORM")
     print("=" * 60)
+
+    from database import db
     
     # Initialize database
     logger.info("Initializing database...")
-    if not initialize_database_with_retry():
+    if not initialize_database_with_retry(db):
         logger.error("Failed to initialize database. Exiting...")
         return
     
@@ -107,10 +109,16 @@ def main():
     # Run based on mode
     try:
         if args.mode == 'chat':
+            from chat_interface import launch_chat_interface
+
             logger.info(f"Starting chat interface on {args.host}:{args.port}")
-            launch_chat_interface(host=args.host, port=args.port, share=args.share, debug=args.debug)
+            # Use lightweight debug if debug-light is enabled, otherwise use regular debug
+            debug_mode = args.debug and not args.debug_light
+            launch_chat_interface(host=args.host, port=args.port, share=args.share, debug=debug_mode)
             
         elif args.mode == 'web':
+            from web_interface import launch_app
+
             logger.info(f"Starting full web interface on {args.host}:{args.port}")
             launch_app(host=args.host, port=args.port, share=args.share, debug=args.debug)
             
