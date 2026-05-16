@@ -1,0 +1,49 @@
+{
+  "summary": {
+    "total_cases": 4,
+    "passed": 4,
+    "failed": 0,
+    "pass_rate": 1.0,
+    "average_score": 1.0,
+    "grader": "QAEvalChain",
+    "report_path": "/mnt/m/github_project/Python/Enabling_AI-Powered_Business_Intelligence_for_Organizations/output/evaluation_report.json"
+  },
+  "results": [
+    {
+      "question": "Which product had the highest sales?",
+      "reference": "The answer should identify the top product by total sales from the CSV analysis.",
+      "prediction": "Widget A had the highest sales with a total of $375,235.00. This is directly stated in multiple sources, including [Source 3] and [Source 4].\n\n---\nSource: csv_analysis_results.pkl\nScore: 0.940",
+      "latency_seconds": 0.765,
+      "score": 1.0,
+      "passed": true,
+      "reason": "GRADE: CORRECT"
+    },
+    {
+      "question": "Which region performed best for sales?",
+      "reference": "The answer should identify the best region by total sales from the CSV analysis.",
+      "prediction": "The West region performed best for sales with a total of $361,383.00. This is also confirmed by Source 2, which states that the Best Region for Sales is the West with $361,383.00.\n\n---\nSource: csv_analysis_results.pkl\nScore: 1.010",
+      "latency_seconds": 0.498,
+      "score": 1.0,
+      "passed": true,
+      "reason": "GRADE: CORRECT"
+    },
+    {
+      "question": "What are the main benefits of AI in business intelligence?",
+      "reference": "The answer should describe how AI supports BI through analysis, prediction, pattern detection, and decision support.",
+      "prediction": "The main benefits of AI in business intelligence include:\n\nBetter decision making; \nBetter customer handling; \nFaster response to key business issues; \nImproved employee skills; \nImproved productivity; \nIncreased profits; \nSharing best practices; \nReduced costs; \nIncreased market share; \nCreation of new business opportunities; \nImproved new product development.\n\n---\nSource: BI approaches.pdf\nScore: 0.608",
+      "latency_seconds": 0.422,
+      "score": 1.0,
+      "passed": true,
+      "reason": "GRADE: CORRECT\n\nThe student's answer accurately describes the benefits of AI in business intelligence, including improved decision making, customer handling, and productivity, among others. While the true answer focuses on the analytical and predictive capabilities of AI in BI, the student's answer is factually accurate in describing the positive outcomes of AI in business intelligence."
+    },
+    {
+      "question": "What statistical measures are available in the sales analysis?",
+      "reference": "The answer should mention statistics such as median, standard deviation, mean, totals, or rankings.",
+      "prediction": "The statistical measures available in the sales analysis are:\n\n- Total sales\n- Average sales\n- Count of sales\n- Standard deviation (std)\n- Minimum sales (min)\n- Maximum sales (max)\n- Median sales\n\nThese measures are provided in the overview section of the sales analysis.\n\n---\nSource: csv_analysis_results.pkl\nScore: 0.926",
+      "latency_seconds": 0.391,
+      "score": 1.0,
+      "passed": true,
+      "reason": "GRADE: CORRECT\n\nThe student's answer includes several statistical measures that are mentioned in the true answer, such as median, standard deviation, and totals. Although the true answer does not explicitly mention \"average sales\" or \"count of sales,\" these measures are equivalent to the \"mean\" and \"total\" mentioned in the true answer, respectively. The student's answer also includes \"minimum sales (min)\" and \"maximum sales (max),\" which are not explicitly mentioned in the true answer, but are still factual and accurate."
+    }
+  ]
+}
