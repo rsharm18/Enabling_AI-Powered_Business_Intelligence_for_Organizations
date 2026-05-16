@@ -142,6 +142,7 @@ class BIWebInterface:
                 )
 
                 process_btn = gr.Button("Process Documents", variant="primary")
+                reset_reload_btn = gr.Button("Reset DB and Reload PDFs/Pickle", variant="stop")
                 embed_btn = gr.Button("Generate Embeddings", variant="secondary")
 
                 with gr.Accordion("Processing Options"):
@@ -167,6 +168,12 @@ class BIWebInterface:
         # Event handlers
         process_btn.click(
             fn=self._process_documents,
+            inputs=[pdf_dir],
+            outputs=[doc_stats, process_log]
+        )
+
+        reset_reload_btn.click(
+            fn=self._reset_and_reload_documents,
             inputs=[pdf_dir],
             outputs=[doc_stats, process_log]
         )
@@ -301,6 +308,8 @@ class BIWebInterface:
     def _process_documents(self, pdf_dir: str) -> Tuple[Dict[str, Any], str]:
         """Process documents from directory."""
         try:
+            from app.rag_analysis.document_processor import DocumentProcessor
+
             # Initialize RAG components
             self._initialize_rag_components()
 
@@ -308,7 +317,7 @@ class BIWebInterface:
             self.document_processor = DocumentProcessor(pdf_dir)
 
             # Process documents
-            count = self.document_processor.process_and_store_documents()
+            count = self.document_processor.process_and_store_documents(force=True)
 
             # Get stats
             stats = self.document_processor.get_document_stats()
@@ -320,6 +329,27 @@ class BIWebInterface:
         except Exception as e:
             logger.error(f"Document processing error: {e}")
             return {}, f"Error processing documents: {str(e)}"
+
+    def _reset_and_reload_documents(self, pdf_dir: str) -> Tuple[Dict[str, Any], str]:
+        """Clear RAG documents, then reload PDFs and the CSV analysis pickle."""
+        try:
+            from app.rag_analysis.document_processor import DocumentProcessor
+
+            self._initialize_rag_components()
+            self.document_processor = DocumentProcessor(pdf_dir)
+
+            count = self.document_processor.reset_and_reload_documents()
+            stats = self.document_processor.get_document_stats()
+
+            log = (
+                f"Reset the RAG document store and reloaded {count} document sections "
+                f"from {pdf_dir} plus any csv_analysis_results.pkl file."
+            )
+            return stats, log
+
+        except Exception as e:
+            logger.error(f"Reset/reload error: {e}")
+            return {}, f"Error resetting and reloading documents: {str(e)}"
 
     def _generate_embeddings(self, batch_size: int) -> Tuple[Dict[str, Any], str]:
         """Generate embeddings for documents."""

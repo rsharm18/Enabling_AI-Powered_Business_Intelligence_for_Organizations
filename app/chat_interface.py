@@ -140,6 +140,67 @@ class ChatInterface:
         self.chat_history = []
         return []
 
+    def _extract_file_paths(self, files) -> List[str]:
+        """Return filesystem paths from Gradio file payloads."""
+        if not files:
+            return []
+
+        if not isinstance(files, list):
+            files = [files]
+
+        paths = []
+        for file in files:
+            if isinstance(file, str):
+                paths.append(file)
+            elif isinstance(file, dict):
+                path = file.get("name") or file.get("path")
+                if not path and isinstance(file.get("file"), dict):
+                    path = file["file"].get("path") or file["file"].get("name")
+                if path:
+                    paths.append(path)
+            elif hasattr(file, "name"):
+                paths.append(file.name)
+            elif hasattr(file, "path"):
+                paths.append(file.path)
+
+        return paths
+
+    def upload_documents(self, files) -> str:
+        """Index user-uploaded PDFs or pickle files from the chat interface."""
+        try:
+            file_paths = self._extract_file_paths(files)
+            if not file_paths:
+                return "Upload at least one PDF or pickle file."
+
+            from app.rag_analysis.document_processor import DocumentProcessor
+
+            processor = DocumentProcessor()
+            count = processor.process_uploaded_files(file_paths)
+            self.agent = None
+
+            return f"Indexed {count} uploaded document sections from {len(file_paths)} file(s)."
+        except Exception as e:
+            logger.error(f"Upload processing error: {e}")
+            return f"Error processing upload: {str(e)}"
+
+    def reset_and_reload_documents(self) -> str:
+        """Reset RAG tables and reload the default PDFs plus CSV analysis pickle."""
+        try:
+            from app.rag_analysis.document_processor import DocumentProcessor
+
+            processor = DocumentProcessor()
+            count = processor.reset_and_reload_documents()
+            self.agent = None
+
+            status = (
+                f"Reset the RAG document store and reloaded {count} document sections "
+                "from the default PDF folder and CSV analysis pickle."
+            )
+            return status
+        except Exception as e:
+            logger.error(f"Reset/reload error: {e}")
+            return f"Error resetting and reloading documents: {str(e)}"
+
     def create_interface(self) -> gr.Blocks:
         """Create the chat interface."""
 
@@ -173,6 +234,23 @@ class ChatInterface:
             # Database status display
             with gr.Row():
                 db_status_display = gr.JSON(label="Database Status", value=self._get_database_status())
+
+            with gr.Accordion("Document Management", open=False):
+                with gr.Row():
+                    upload_files = gr.File(
+                        label="Upload PDFs or Pickle Files",
+                        file_types=[".pdf", ".pkl", ".pickle"],
+                        file_count="multiple"
+                    )
+                    upload_btn = gr.Button("Upload and Index", variant="secondary")
+                    reset_reload_btn = gr.Button("Reset DB and Reload Defaults", variant="stop")
+                    refresh_status_btn = gr.Button("Refresh Status", variant="secondary")
+
+                document_status = gr.Textbox(
+                    label="Document Status",
+                    interactive=False,
+                    lines=2
+                )
 
             # Chat interface
             with gr.Column(elem_classes=["chat-container"]):
@@ -230,6 +308,22 @@ class ChatInterface:
             clear.click(
                 lambda: ([], ""),
                 outputs=[chatbot, msg]
+            )
+
+            upload_btn.click(
+                self.upload_documents,
+                inputs=[upload_files],
+                outputs=document_status
+            )
+
+            reset_reload_btn.click(
+                self.reset_and_reload_documents,
+                outputs=document_status
+            )
+
+            refresh_status_btn.click(
+                self._get_database_status,
+                outputs=db_status_display
             )
 
             # Auto-refresh database status

@@ -4,6 +4,7 @@ from psycopg2.extras import Json, RealDictCursor
 from typing import Optional, Dict, Any, List
 import logging
 import json
+import threading
 
 from app.config import Config
 
@@ -14,39 +15,47 @@ class DatabaseManager:
     def __init__(self):
         self.database_url = os.getenv('DATABASE_URL', 'postgresql://postgres:postgres@localhost:5432/bi_db')
         self.connection = None
+        self._lock = threading.RLock()
 
     def connect(self):
         """Establish database connection"""
-        try:
-            self.connection = psycopg2.connect(self.database_url)
-            self.connection.autocommit = True
-            logger.info("Database connection established")
-            return True
-        except Exception as e:
-            logger.error(f"Failed to connect to database: {e}")
-            return False
+        with self._lock:
+            try:
+                if self.connection and not self.connection.closed:
+                    return True
+
+                self.connection = psycopg2.connect(self.database_url)
+                self.connection.autocommit = True
+                logger.info("Database connection established")
+                return True
+            except Exception as e:
+                logger.error(f"Failed to connect to database: {e}")
+                return False
 
     def disconnect(self):
         """Close database connection"""
-        if self.connection:
-            self.connection.close()
-            logger.info("Database connection closed")
+        with self._lock:
+            if self.connection:
+                self.connection.close()
+                self.connection = None
+                logger.info("Database connection closed")
 
     def execute_query(self, query: str, params: Optional[tuple] = None) -> List[Dict[str, Any]]:
         """Execute a query and return results"""
-        if not self.connection:
-            if not self.connect():
-                return []
+        with self._lock:
+            if not self.connection or self.connection.closed:
+                if not self.connect():
+                    return []
 
-        try:
-            with self.connection.cursor(cursor_factory=RealDictCursor) as cursor:
-                cursor.execute(query, params)
-                if cursor.description:
-                    return [dict(row) for row in cursor.fetchall()]
+            try:
+                with self.connection.cursor(cursor_factory=RealDictCursor) as cursor:
+                    cursor.execute(query, params)
+                    if cursor.description:
+                        return [dict(row) for row in cursor.fetchall()]
+                    return []
+            except Exception as e:
+                logger.error(f"Query execution failed: {e}")
                 return []
-        except Exception as e:
-            logger.error(f"Query execution failed: {e}")
-            return []
 
     def initialize_database(self) -> bool:
         """Initialize database with required tables and extensions"""
@@ -178,20 +187,21 @@ class DatabaseManager:
         """
         try:
             # Use a direct cursor for INSERT with RETURNING to avoid issues with execute_query
-            if not self.connection:
-                if not self.connect():
-                    return None
+            with self._lock:
+                if not self.connection or self.connection.closed:
+                    if not self.connect():
+                        return None
 
-            with self.connection.cursor(cursor_factory=RealDictCursor) as cursor:
-                cursor.execute(query, (clean_content, metadata_json, embedding))
-                result = cursor.fetchone()
-                if result:
-                    doc_id = result['id']
-                    logger.info(f"Database returned document ID: {doc_id}")
-                    return doc_id
-                else:
-                    logger.error("Database query returned no result")
-                    return None
+                with self.connection.cursor(cursor_factory=RealDictCursor) as cursor:
+                    cursor.execute(query, (clean_content, metadata_json, embedding))
+                    result = cursor.fetchone()
+                    if result:
+                        doc_id = result['id']
+                        logger.info(f"Database returned document ID: {doc_id}")
+                        return doc_id
+                    else:
+                        logger.error("Database query returned no result")
+                        return None
         except Exception as e:
             logger.error(f"Failed to store embedding: {e}")
             logger.error(f"Content type: {type(clean_content)}, length: {len(clean_content) if clean_content else 'N/A'}")
@@ -226,15 +236,16 @@ class DatabaseManager:
         """
 
         try:
-            if not self.connection:
-                if not self.connect():
-                    return 0
+            with self._lock:
+                if not self.connection or self.connection.closed:
+                    if not self.connect():
+                        return 0
 
-            with self.connection.cursor() as cursor:
-                # Use execute_values for bulk insert
-                from psycopg2.extras import execute_values
-                execute_values(cursor, query, values)
-                self.connection.commit()
+                with self.connection.cursor() as cursor:
+                    # Use execute_values for bulk insert
+                    from psycopg2.extras import execute_values
+                    execute_values(cursor, query, values)
+                    self.connection.commit()
 
             logger.info(f"Bulk inserted {len(documents_data)} documents")
             return len(documents_data)
@@ -271,15 +282,16 @@ class DatabaseManager:
         """
 
         try:
-            if not self.connection:
-                if not self.connect():
-                    return 0
+            with self._lock:
+                if not self.connection or self.connection.closed:
+                    if not self.connect():
+                        return 0
 
-            with self.connection.cursor() as cursor:
-                # Use execute_values for bulk insert
-                from psycopg2.extras import execute_values
-                execute_values(cursor, query, values)
-                self.connection.commit()
+                with self.connection.cursor() as cursor:
+                    # Use execute_values for bulk insert
+                    from psycopg2.extras import execute_values
+                    execute_values(cursor, query, values)
+                    self.connection.commit()
 
             logger.info(f"Bulk inserted {len(chunks_data)} chunks")
             return len(chunks_data)

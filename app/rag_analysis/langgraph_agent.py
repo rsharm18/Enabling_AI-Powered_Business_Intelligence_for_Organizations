@@ -2,6 +2,7 @@
 
 import logging
 from pathlib import Path
+import re
 from typing import List, Dict, Any, Optional, AsyncGenerator
 from langchain_core.messages import HumanMessage, AIMessage, SystemMessage
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
@@ -86,6 +87,17 @@ class ConversationalAgent:
     def _build_graph(self):
         """Build the LangGraph workflow."""
 
+        def strip_model_source_footer(response: str) -> str:
+            """Remove model-generated source footer so the app emits one canonical footer."""
+            patterns = [
+                r"\n+\s*Source:\s*.+?\s*,?\s*score:\s*[0-9.]+\s*$",
+                r"\n+\s*Source:\s*.+?\n\s*Score:\s*[0-9.]+\s*$",
+            ]
+            cleaned = response.strip()
+            for pattern in patterns:
+                cleaned = re.sub(pattern, "", cleaned, flags=re.IGNORECASE | re.DOTALL).strip()
+            return cleaned
+
         # Define the nodes
         def retrieve_documents(state: AgentState) -> AgentState:
             """Retrieve relevant documents based on the query."""
@@ -137,7 +149,7 @@ Rules:
 2. Keep the answer concise (max 5 sentences unless more detail is requested).
 3. If one source directly answers the question, prioritize that source.
 4. Ignore unrelated retrieved context.
-5. Mention the most relevant source name and score used at the end.
+5. Do not include a source, citation, relevance score, or footer line; the application adds that separately.
 6. If the answer is not present in the context, clearly say so.
 
 Answer:
@@ -145,7 +157,7 @@ Answer:
 
                     # Generate response using LLM
                     llm_response = self.llm.invoke(prompt)
-                    response = llm_response.content.strip()
+                    response = strip_model_source_footer(llm_response.content)
                     if search_results:
                         top_result = search_results[0]
 
@@ -294,13 +306,13 @@ Answer:
                     # Handle both list format [human_msg, ai_msg] and dict format
                     if isinstance(item, (list, tuple)) and len(item) >= 2:
                         human_msg, ai_msg = item[0], item[1]
-                        messages.append(HumanMessage(content=human_msg))
-                        messages.append(AIMessage(content=ai_msg))
+                        messages.append(HumanMessage(content=self._content_to_text(human_msg)))
+                        messages.append(AIMessage(content=self._content_to_text(ai_msg)))
                     elif isinstance(item, dict) and 'role' in item and 'content' in item:
                         if item['role'] == 'user':
-                            messages.append(HumanMessage(content=item['content']))
+                            messages.append(HumanMessage(content=self._content_to_text(item['content'])))
                         elif item['role'] == 'assistant':
-                            messages.append(AIMessage(content=item['content']))
+                            messages.append(AIMessage(content=self._content_to_text(item['content'])))
 
             # Add current message
             messages.append(HumanMessage(content=message))
@@ -318,6 +330,30 @@ Answer:
         except Exception as e:
             logger.error(f"Error in chat processing: {e}")
             return f"Sorry, I encountered an error: {str(e)}"
+
+    def _content_to_text(self, content: Any) -> str:
+        """Normalize Gradio 6 message content blocks to plain text for LangChain messages."""
+        if isinstance(content, str):
+            return content
+
+        if isinstance(content, list):
+            parts = []
+            for block in content:
+                if isinstance(block, str):
+                    parts.append(block)
+                elif isinstance(block, dict):
+                    if block.get("type") == "text":
+                        parts.append(str(block.get("text", "")))
+                    elif block.get("type") == "file":
+                        file_info = block.get("file") or {}
+                        file_path = file_info.get("path") or file_info.get("name") or ""
+                        if file_path:
+                            parts.append(f"[uploaded file: {Path(file_path).name}]")
+                    elif "content" in block:
+                        parts.append(str(block.get("content", "")))
+            return "\n".join(part for part in parts if part).strip()
+
+        return str(content)
 
     def get_search_stats(self) -> Dict[str, Any]:
         """Get statistics about the search capabilities."""

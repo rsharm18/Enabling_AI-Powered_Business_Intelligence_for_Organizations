@@ -104,14 +104,14 @@ class DocumentProcessor:
 
         return formatted
 
-    def _load_csv_analysis_documents(self) -> List[Document]:
+    def _load_csv_analysis_documents(self, pickle_path: Optional[Path] = None) -> List[Document]:
         """
         Load CSV analysis pickle results and convert them to LangChain documents.
 
         The CSV analyzer stores a dictionary of analysis sections. Creating one
         document per section gives vector search useful retrieval granularity.
         """
-        pickle_path = self._find_csv_analysis_pickle_path()
+        pickle_path = pickle_path or self._find_csv_analysis_pickle_path()
         if not pickle_path:
             return []
 
@@ -187,6 +187,124 @@ class DocumentProcessor:
         logger.info(f"Loaded {len(documents)} CSV analysis documents from {pickle_path}")
         return documents
 
+    def load_uploaded_documents(self, file_paths: List[str]) -> List[Document]:
+        """Load user-uploaded PDF or pickle files into LangChain documents."""
+        documents = []
+
+        for file_path in file_paths:
+            path = Path(file_path)
+            suffix = path.suffix.lower()
+
+            try:
+                if suffix == ".pdf":
+                    loaded = PyPDFLoader(str(path)).load()
+                    for doc in loaded:
+                        doc.metadata.update({
+                            'source': str(path),
+                            'file_name': path.name,
+                            'source_type': 'uploaded_pdf',
+                            'type': 'uploaded_document'
+                        })
+                    documents.extend(loaded)
+                elif suffix in {".pkl", ".pickle"}:
+                    documents.extend(self._load_csv_analysis_documents(path))
+                else:
+                    logger.warning(f"Unsupported upload type skipped: {path}")
+            except Exception as e:
+                logger.error(f"Failed to load uploaded file {path}: {e}")
+
+        logger.info(f"Loaded {len(documents)} uploaded documents from {len(file_paths)} files")
+        return documents
+
+    def _store_documents_with_embeddings(self, documents: List[Document]) -> int:
+        """Store preloaded LangChain documents and their chunks with embeddings."""
+        if not documents:
+            logger.warning("No documents found")
+            return 0
+
+        if self.embedding_generator is None:
+            self.embedding_generator = EmbeddingGenerator()
+            logger.info(f"Initialized embedding generator with model: {self.embedding_generator.model_name}")
+
+        logger.info(f"Loaded {len(documents)} documents")
+
+        texts = [doc.page_content for doc in documents]
+        embeddings = self.embedding_generator.generate_embeddings(texts)
+        logger.info(f"Generated embeddings for {len(documents)} documents")
+
+        if len(embeddings) != len(documents):
+            logger.error(
+                f"Embedding count mismatch: {len(embeddings)} embeddings for {len(documents)} documents"
+            )
+            return 0
+
+        if embeddings:
+            logger.info(f"Embedding type: {type(embeddings[0])}")
+            logger.info(f"First embedding length: {len(embeddings[0]) if isinstance(embeddings[0], list) else 'N/A'}")
+
+        stored_documents = []
+        for i, doc in enumerate(documents):
+            metadata = self._make_json_safe({
+                **doc.metadata,
+                'source': doc.metadata.get('source', ''),
+                'page': doc.metadata.get('page', 0),
+                'total_pages': doc.metadata.get('total_pages', 0)
+            })
+
+            clean_content = doc.page_content.replace('\x00', '')
+
+            document_id = db.store_embedding(clean_content, metadata, embeddings[i])
+            if document_id:
+                stored_documents.append((document_id, doc))
+            else:
+                logger.warning(f"Failed to store document {i}; skipping its chunks")
+
+        stored_count = len(stored_documents)
+        if stored_count == 0:
+            logger.warning("No documents were stored")
+            return 0
+
+        chunks_with_document_ids = []
+        for document_id, doc in stored_documents:
+            doc_chunks = self.text_splitter.split_documents([doc])
+            for chunk_index, chunk in enumerate(doc_chunks):
+                chunks_with_document_ids.append((document_id, chunk_index, chunk))
+
+        logger.info(f"Split {stored_count} stored documents into {len(chunks_with_document_ids)} chunks")
+        if not chunks_with_document_ids:
+            logger.warning("No chunks created")
+            return stored_count
+
+        chunk_texts = [chunk.page_content for _, _, chunk in chunks_with_document_ids]
+        chunk_embeddings = self.embedding_generator.generate_embeddings(chunk_texts)
+        logger.info(f"Generated embeddings for {len(chunks_with_document_ids)} chunks")
+
+        if len(chunk_embeddings) != len(chunks_with_document_ids):
+            logger.error(
+                f"Chunk embedding count mismatch: {len(chunk_embeddings)} embeddings "
+                f"for {len(chunks_with_document_ids)} chunks"
+            )
+            return stored_count
+
+        chunks_data = []
+        for i, (document_id, chunk_index, chunk) in enumerate(chunks_with_document_ids):
+            chunks_data.append({
+                'document_id': document_id,
+                'chunk_text': chunk.page_content.replace('\x00', ''),
+                'chunk_index': chunk_index,
+                'embedding': chunk_embeddings[i]
+            })
+
+        stored_chunks = db.store_chunks_bulk(chunks_data)
+
+        logger.info(f"Processed and stored {stored_count} documents and {stored_chunks} chunks with embeddings")
+        return stored_count
+
+    def process_uploaded_files(self, file_paths: List[str]) -> int:
+        """Process uploaded PDF or pickle files and store them in the vector database."""
+        documents = self.load_uploaded_documents(file_paths)
+        return self._store_documents_with_embeddings(documents)
+
     def _make_json_safe(self, value: Any) -> Any:
         """Convert metadata values to JSON-serializable primitives."""
         if isinstance(value, dict):
@@ -261,7 +379,7 @@ class DocumentProcessor:
             logger.error(f"Error splitting documents: {e}")
             return []
 
-    def process_and_store_documents(self, glob_pattern: str = "*.pdf") -> int:
+    def process_and_store_documents(self, glob_pattern: str = "*.pdf", force: bool = False) -> int:
         """
         Load, split, and store documents in database with embeddings.
 
@@ -272,101 +390,21 @@ class DocumentProcessor:
             Number of documents processed
         """
         # Check if data loading is enabled
-        if not Config.PRE_LOAD_DATA:
+        if not Config.PRE_LOAD_DATA and not force:
             logger.info("PRE_LOAD_DATA is set to False. Skipping PDF document processing.")
             return 0
-
-        if self.embedding_generator is None:
-            self.embedding_generator = EmbeddingGenerator()
-            logger.info(f"Initialized embedding generator with model: {self.embedding_generator.model_name}")
 
         # Load documents
         logger.info(f"Loading documents from {self.data_directory} with pattern {glob_pattern}")
         documents = self.load_documents(glob_pattern)
-        if not documents:
-            logger.warning("No documents found")
+        return self._store_documents_with_embeddings(documents)
+
+    def reset_and_reload_documents(self, glob_pattern: str = "*.pdf") -> int:
+        """Clear RAG documents and reload PDFs plus the CSV analysis pickle."""
+        if not self.clear_database_documents():
             return 0
 
-        logger.info(f"Loaded {len(documents)} documents")
-
-        # Generate embeddings for all documents at once using EmbeddingGenerator
-        texts = [doc.page_content for doc in documents]
-        embeddings = self.embedding_generator.generate_embeddings(texts)
-        logger.info(f"Generated embeddings for {len(documents)} documents")
-
-        if len(embeddings) != len(documents):
-            logger.error(
-                f"Embedding count mismatch: {len(embeddings)} embeddings for {len(documents)} documents"
-            )
-            return 0
-
-        # Debug: Check embedding format
-        if embeddings:
-            logger.info(f"Embedding type: {type(embeddings[0])}")
-            logger.info(f"First embedding length: {len(embeddings[0]) if isinstance(embeddings[0], list) else 'N/A'}")
-
-        # Store documents and keep their database IDs for chunk references.
-        stored_documents = []
-        for i, doc in enumerate(documents):
-            metadata = self._make_json_safe({
-                **doc.metadata,
-                'source': doc.metadata.get('source', ''),
-                'page': doc.metadata.get('page', 0),
-                'total_pages': doc.metadata.get('total_pages', 0)
-            })
-
-            # Clean content to remove NUL characters
-            clean_content = doc.page_content.replace('\x00', '')
-
-            document_id = db.store_embedding(clean_content, metadata, embeddings[i])
-            if document_id:
-                stored_documents.append((document_id, doc))
-            else:
-                logger.warning(f"Failed to store document {i}; skipping its chunks")
-
-        stored_count = len(stored_documents)
-        if stored_count == 0:
-            logger.warning("No documents were stored")
-            return 0
-
-        chunks_with_document_ids = []
-        for document_id, doc in stored_documents:
-            doc_chunks = self.text_splitter.split_documents([doc])
-            for chunk_index, chunk in enumerate(doc_chunks):
-                chunks_with_document_ids.append((document_id, chunk_index, chunk))
-
-        logger.info(f"Split {stored_count} stored documents into {len(chunks_with_document_ids)} chunks")
-        if not chunks_with_document_ids:
-            logger.warning("No chunks created")
-            return stored_count
-
-        # Generate and store chunks with embeddings
-        chunk_texts = [chunk.page_content for _, _, chunk in chunks_with_document_ids]
-        chunk_embeddings = self.embedding_generator.generate_embeddings(chunk_texts)
-        logger.info(f"Generated embeddings for {len(chunks_with_document_ids)} chunks")
-
-        if len(chunk_embeddings) != len(chunks_with_document_ids):
-            logger.error(
-                f"Chunk embedding count mismatch: {len(chunk_embeddings)} embeddings "
-                f"for {len(chunks_with_document_ids)} chunks"
-            )
-            return stored_count
-
-        # Prepare chunks data for bulk insertion
-        chunks_data = []
-        for i, (document_id, chunk_index, chunk) in enumerate(chunks_with_document_ids):
-            chunks_data.append({
-                'document_id': document_id,
-                'chunk_text': chunk.page_content.replace('\x00', ''),
-                'chunk_index': chunk_index,
-                'embedding': chunk_embeddings[i]
-            })
-
-        # Bulk insert all chunks
-        stored_chunks = db.store_chunks_bulk(chunks_data)
-
-        logger.info(f"Processed and stored {stored_count} documents and {stored_chunks} chunks with embeddings")
-        return stored_count
+        return self.process_and_store_documents(glob_pattern=glob_pattern, force=True)
 
     def get_document_stats(self) -> Dict[str, Any]:
         """
@@ -382,13 +420,15 @@ class DocumentProcessor:
         pdf_files = list(self.data_directory.glob("*.pdf"))
 
         # Get database stats
-        doc_count = len(db.execute_query("SELECT COUNT(*) as count FROM document_embeddings"))
+        doc_count = db.execute_query("SELECT COUNT(*) as count FROM document_embeddings")
+        chunk_count = db.execute_query("SELECT COUNT(*) as count FROM document_chunks")
 
         return {
             'directory': str(self.data_directory),
             'pdf_files_count': len(pdf_files),
             'pdf_files': [f.name for f in pdf_files],
-            'stored_documents': doc_count[0]['count'] if doc_count else 0
+            'stored_documents': doc_count[0]['count'] if doc_count else 0,
+            'stored_chunks': chunk_count[0]['count'] if chunk_count else 0
         }
 
     def clear_database_documents(self) -> bool:
@@ -399,8 +439,7 @@ class DocumentProcessor:
             True if successful, False otherwise
         """
         try:
-            db.execute_query("DELETE FROM document_chunks")
-            db.execute_query("DELETE FROM document_embeddings")
+            db.execute_query("TRUNCATE TABLE document_chunks, document_embeddings RESTART IDENTITY CASCADE")
             logger.info("Cleared all documents from database")
             return True
         except Exception as e:
