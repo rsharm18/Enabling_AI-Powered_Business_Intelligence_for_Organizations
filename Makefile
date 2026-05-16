@@ -1,4 +1,4 @@
-.PHONY: help setup web csv process stop kill-port start-db stop-db clean
+.PHONY: help setup web csv process eval stop kill-port start-db stop-db clean
 
 help:
 	@echo "AI-Powered Business Intelligence Platform - Make Commands"
@@ -8,6 +8,7 @@ help:
 	@echo "  make debug      - Start chat interface in debug mode with live code refresh"
 	@echo "  make csv        - Run CSV analysis mode"
 	@echo "  make process    - Run document processing mode"
+	@echo "  make eval       - Run QA evaluation and write output/evaluation_report.json"
 	@echo ""
 	@echo "Service Management:"
 	@echo "  make stop       - Stop application (kill port 7860)"
@@ -44,6 +45,10 @@ csv:
 process:
 	@echo "Starting document processing mode..."
 	@PYTHONPATH=/mnt/m/github_project/Python/Enabling_AI-Powered_Business_Intelligence_for_Organizations .venv/bin/python app/main.py --mode process
+
+eval:
+	@echo "Starting QA evaluation mode..."
+	@PYTHONPATH=/mnt/m/github_project/Python/Enabling_AI-Powered_Business_Intelligence_for_Organizations .venv/bin/python app/main.py --mode eval
 
 stop:
 	@echo "Stopping application..."

@@ -1,0 +1,22 @@
+{
+  "summary": {
+    "total_cases": 1,
+    "passed": 1,
+    "failed": 0,
+    "pass_rate": 1.0,
+    "average_score": 1.0,
+    "grader": "QAEvalChain",
+    "report_path": "output/evaluation_ui_smoke_report.json"
+  },
+  "results": [
+    {
+      "question": "Which product had the highest sales?",
+      "reference": "The answer should identify the top product by total sales from the CSV analysis.",
+      "prediction": "Widget A had the highest sales with a total of $375,235.00. This is directly stated in [Source 3] and [Source 5] under the key insights section. Additionally, [Source 1] and [Source 4] also confirm this information with the same sales total for Widget A.\n\n---\nSource: csv_analysis_results.pkl\nScore: 0.940",
+      "latency_seconds": 5.293,
+      "score": 1.0,
+      "passed": true,
+      "reason": "GRADE: CORRECT"
+    }
+  ]
+}
