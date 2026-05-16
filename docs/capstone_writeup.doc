@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Capstone Writeup: Enabling AI-Powered Business Intelligence for Organizations</title>
+  <style>
+    body {
+      font-family: Calibri, Arial, sans-serif;
+      font-size: 11pt;
+      line-height: 1.35;
+      color: #111827;
+      margin: 1in;
+    }
+    h1 {
+      font-size: 20pt;
+      color: #1f2937;
+      margin-bottom: 18pt;
+    }
+    h2 {
+      font-size: 15pt;
+      color: #1f2937;
+      border-bottom: 1px solid #d1d5db;
+      padding-bottom: 4pt;
+      margin-top: 18pt;
+    }
+    h3 {
+      font-size: 12.5pt;
+      color: #374151;
+      margin-top: 14pt;
+    }
+    code, pre {
+      font-family: Consolas, monospace;
+      font-size: 9.5pt;
+    }
+    pre {
+      background: #f3f4f6;
+      border: 1px solid #d1d5db;
+      padding: 8pt;
+      white-space: pre-wrap;
+    }
+    table {
+      border-collapse: collapse;
+      width: 100%;
+      margin: 8pt 0 12pt 0;
+    }
+    th, td {
+      border: 1px solid #d1d5db;
+      padding: 6pt;
+      vertical-align: top;
+    }
+    th {
+      background: #f3f4f6;
+    }
+  </style>
+</head>
+<body>
+  <h1>Capstone Writeup: Enabling AI-Powered Business Intelligence for Organizations</h1>
+
+  <h2>Project Overview</h2>
+  <p>This project implements an AI-powered business intelligence assistant named InsightForge. The system helps users analyze structured sales data, retrieve insights from business documents, and ask natural-language questions through a Gradio interface.</p>
+  <p>The final application uses Gradio instead of Streamlit. The main UI includes database status, document management, evaluation, and chat functionality in one place.</p>
+
+  <h2>Problem Statement</h2>
+  <p>Organizations often store useful business knowledge across multiple formats, including CSV files, PDFs, and generated analysis reports. Decision makers need a way to combine these sources and ask business questions without manually searching through files or writing custom analysis code.</p>
+  <p>This project addresses that problem by combining CSV business intelligence analysis, PDF and pickle document ingestion, vector search over stored document chunks, LLM-based retrieval-augmented generation, and evaluation reporting for answer quality.</p>
+
+  <h2>Goals</h2>
+  <ul>
+    <li>Analyze business sales data and generate useful insights.</li>
+    <li>Produce visual output for sales analysis.</li>
+    <li>Load PDF and analysis documents into a searchable vector database.</li>
+    <li>Provide a chat interface for business questions.</li>
+    <li>Support document reset and upload from the UI.</li>
+    <li>Provide an evaluation workflow using QAEvalChain or an LLM evaluator.</li>
+    <li>Save output artifacts for grading and review.</li>
+  </ul>
+
+  <h2>Technology Stack</h2>
+  <ul>
+    <li>Python</li>
+    <li>Gradio</li>
+    <li>Pandas and NumPy</li>
+    <li>Matplotlib and Seaborn</li>
+    <li>PostgreSQL and pgvector</li>
+    <li>LangChain, LangChain Classic, and LangGraph</li>
+    <li>Groq</li>
+    <li>Sentence Transformers</li>
+    <li>pypdf</li>
+    <li>Docker and Docker Compose</li>
+  </ul>
+
+  <h2>System Architecture</h2>
+  <ol>
+    <li><strong>CSV analysis layer:</strong> Reads sales data, computes statistics, extracts business insights, and generates a dashboard image and pickle file.</li>
+    <li><strong>Document processing layer:</strong> Loads PDF and pickle files, splits content into chunks, generates embeddings, and stores the results in PostgreSQL with pgvector.</li>
+    <li><strong>RAG/chat layer:</strong> Uses vector search to retrieve relevant document chunks and passes those results into the LangGraph-based conversational flow.</li>
+    <li><strong>Gradio UI layer:</strong> Provides database status, document management, evaluation, and chat controls for the user.</li>
+  </ol>
+
+  <h2>Main Features</h2>
+  <h3>CSV Business Intelligence Analysis</h3>
+  <p>The CSV analysis workflow processes sales data and generates business insights such as sales trends, product performance, regional performance, customer-level analysis, statistical summaries, and dashboard visualization.</p>
+  <p>Generated artifacts include:</p>
+  <pre>output/csv_analysis_dashboard.png
+output/csv_analysis_results.pkl</pre>
+
+  <h3>Document Management</h3>
+  <p>The Gradio interface includes document management tools that allow the user to upload PDF files, upload pickle analysis files, reset the database, reload default PDF and pickle files, and refresh database/document status.</p>
+
+  <h3>Chat Interface</h3>
+  <p>The chat interface allows users to ask questions about indexed documents and analysis results. The system retrieves relevant chunks from PostgreSQL/pgvector and uses the LLM to produce an answer grounded in the retrieved context.</p>
+  <p>The application appends one source and score block to each answer:</p>
+  <pre>Source: &lt;document name&gt;
+Score: &lt;retrieval score&gt;</pre>
+
+  <h3>Evaluation</h3>
+  <p>The project includes an evaluation workflow that can be run from either the UI or the command line. The preferred evaluator is QAEvalChain.</p>
+  <p>Because modern LangChain versions moved older evaluation APIs, the project uses:</p>
+  <pre>langchain-classic==1.0.3</pre>
+  <p>The import path is:</p>
+  <pre>from langchain_classic.evaluation.qa import QAEvalChain</pre>
+  <p>If QAEvalChain cannot run, the evaluation system falls back to a Groq-backed LLM judge or a keyword-based heuristic.</p>
+  <p>The default evaluation report is written to:</p>
+  <pre>output/evaluation_report.json</pre>
+
+  <h2>User Interface</h2>
+  <p>The main interface is launched with:</p>
+  <pre>make web</pre>
+  <p>The app runs at:</p>
+  <pre>http://localhost:7860</pre>
+  <p>The UI includes Database Status, Document Management, Evaluation, and Chat.</p>
+
+  <h2>Screenshots</h2>
+  <p>Screenshots are stored in:</p>
+  <pre>docs/screenshots/</pre>
+  <p>Included screenshots:</p>
+  <pre>docs/screenshots/home_page_chat.png
+docs/screenshots/home_page_document_upload.png
+docs/screenshots/home_page_eval.png
+docs/screenshots/csv_analysis_dashboard.png</pre>
+
+  <h2>How To Run</h2>
+  <p>The project is intended to run in WSL with Ubuntu or Ubuntu-24.04.</p>
+  <pre>make start-db
+make csv
+PRE_LOAD_DATA=true make process
+make eval
+make web</pre>
+
+  <h2>Environment Variables</h2>
+  <pre>DATABASE_URL=postgresql://postgres:postgres@localhost:5432/bi_db
+GROQ_API_KEY=your_groq_api_key_here
+GROQ_MODEL=llama-3.3-70b-versatile
+GROQ_MAX_TOKENS=1024
+PRE_LOAD_DATA=false
+LOG_LEVEL=INFO
+WEB_HOST=0.0.0.0
+WEB_PORT=7860</pre>
+
+  <h2>Capstone Requirement Coverage</h2>
+  <table>
+    <tr><th>Requirement Area</th><th>Implementation</th></tr>
+    <tr><td>Data ingestion</td><td>CSV, PDF, and pickle ingestion</td></tr>
+    <tr><td>Business analysis</td><td>Sales statistics, trends, product, region, and customer insights</td></tr>
+    <tr><td>Visual reporting</td><td>Dashboard PNG generated in the output folder</td></tr>
+    <tr><td>AI-powered insights</td><td>RAG chat over indexed business documents</td></tr>
+    <tr><td>Recommendations</td><td>Recommendation-style answers from retrieved analysis context</td></tr>
+    <tr><td>Memory/context</td><td>Gradio chat history passed through the conversation flow</td></tr>
+    <tr><td>Prompt chaining/orchestration</td><td>LangGraph-based flow</td></tr>
+    <tr><td>Evaluation</td><td>QAEvalChain/LLM evaluation with JSON report</td></tr>
+    <tr><td>User interface</td><td>Gradio UI with status, document management, evaluation, and chat</td></tr>
+    <tr><td>Persistence</td><td>PostgreSQL with pgvector</td></tr>
+  </table>
+
+  <h2>Output Artifacts</h2>
+  <pre>output/csv_analysis_dashboard.png
+output/csv_analysis_results.pkl
+output/evaluation_report.json</pre>
+  <p>These files can be used by the grader to verify that the analysis and evaluation workflows were executed.</p>
+
+  <h2>Conclusion</h2>
+  <p>InsightForge demonstrates how AI can support business intelligence workflows by combining structured data analysis, document retrieval, vector search, and LLM-based question answering. The final Gradio interface gives users a single place to manage documents, inspect database status, run evaluation, and ask business questions.</p>
+</body>
+</html>
