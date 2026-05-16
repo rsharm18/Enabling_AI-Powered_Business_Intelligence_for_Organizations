@@ -81,10 +81,13 @@ def run_csv_analysis(data_file: str = None, schema_file: str = None):
 def main():
     """Main application entry point."""
     parser = argparse.ArgumentParser(description='AI-Powered Business Intelligence Platform')
-    parser.add_argument('--mode', choices=['web', 'chat', 'csv', 'process'], default='chat',
-                       help='Application mode: chat (conversational), web (full interface), csv (analysis), process (documents)')
+    parser.add_argument('--mode', choices=['web', 'chat', 'csv', 'process', 'eval'], default='chat',
+                       help='Application mode: chat (conversational), web (full interface), csv (analysis), process (documents), eval (QA evaluation)')
     parser.add_argument('--data-file', help='Path to CSV file for analysis')
     parser.add_argument('--schema-file', help='Path to schema file')
+    parser.add_argument('--eval-file', help='Path to JSON evaluation cases')
+    parser.add_argument('--eval-output', help='Path for evaluation report JSON')
+    parser.add_argument('--eval-limit', type=int, help='Maximum number of evaluation cases to run')
     parser.add_argument('--host', default=Config.WEB_HOST, help='Web interface host')
     parser.add_argument('--port', type=int, default=Config.WEB_PORT, help='Web interface port')
     parser.add_argument('--share', action='store_true', help='Share web interface publicly')
@@ -145,6 +148,25 @@ def main():
             processor = DocumentProcessor()
             doc_count = processor.process_and_store_documents()
             logger.info(f"Processed and stored {doc_count} documents with embeddings")
+
+        elif args.mode == 'eval':
+            logger.info("Running evaluation mode")
+            from app.evaluation import run_evaluation
+
+            report = run_evaluation(
+                eval_file=args.eval_file,
+                output_file=args.eval_output,
+                max_cases=args.eval_limit,
+            )
+            summary = report.get("summary", {})
+            print("Evaluation complete")
+            print(f"Total cases: {summary.get('total_cases', 0)}")
+            print(f"Passed: {summary.get('passed', 0)}")
+            print(f"Failed: {summary.get('failed', 0)}")
+            print(f"Pass rate: {summary.get('pass_rate', 0)}")
+            print(f"Average score: {summary.get('average_score', 0)}")
+            print(f"Grader: {summary.get('grader', 'unknown')}")
+            print(f"Report: {summary.get('report_path', Config.OUTPUT_DIR / 'evaluation_report.json')}")
 
     except KeyboardInterrupt:
         logger.info("Application interrupted by user")

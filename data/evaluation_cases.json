@@ -1,0 +1,22 @@
+[
+  {
+    "question": "Which product had the highest sales?",
+    "reference": "The answer should identify the top product by total sales from the CSV analysis.",
+    "expected_keywords": ["product", "sales"]
+  },
+  {
+    "question": "Which region performed best for sales?",
+    "reference": "The answer should identify the best region by total sales from the CSV analysis.",
+    "expected_keywords": ["region", "sales"]
+  },
+  {
+    "question": "What are the main benefits of AI in business intelligence?",
+    "reference": "The answer should describe how AI supports BI through analysis, prediction, pattern detection, and decision support.",
+    "expected_keywords": ["AI", "business intelligence", "data", "decision"]
+  },
+  {
+    "question": "What statistical measures are available in the sales analysis?",
+    "reference": "The answer should mention statistics such as median, standard deviation, mean, totals, or rankings.",
+    "expected_keywords": ["median", "standard deviation", "mean", "sales"]
+  }
+]

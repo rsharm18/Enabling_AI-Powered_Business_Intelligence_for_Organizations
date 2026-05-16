@@ -65,7 +65,11 @@ class ConversationalAgent:
             self.embedding_generator = EmbeddingGenerator()
             self.vector_search = VectorSearch(self.embedding_generator)
 
-            logger.info(f"RAG components initialization started with Groq: {GROQ_AVAILABLE} and key: {Config.GROQ_API_KEY}")
+            logger.info(
+                "RAG components initialization started with Groq available=%s, api_key_configured=%s",
+                GROQ_AVAILABLE,
+                bool(Config.GROQ_API_KEY),
+            )
             # Initialize LLM if Groq is available
             if GROQ_AVAILABLE and Config.GROQ_API_KEY:
                 self.llm = ChatGroq(

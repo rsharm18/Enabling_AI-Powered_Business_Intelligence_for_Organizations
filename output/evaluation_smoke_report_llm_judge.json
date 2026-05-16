@@ -1,0 +1,22 @@
+{
+  "summary": {
+    "total_cases": 1,
+    "passed": 1,
+    "failed": 0,
+    "pass_rate": 1.0,
+    "average_score": 0.94,
+    "grader": "Groq LLM judge",
+    "report_path": "output/evaluation_smoke_report.json"
+  },
+  "results": [
+    {
+      "question": "Which product had the highest sales?",
+      "reference": "The answer should identify the top product by total sales from the CSV analysis.",
+      "prediction": "Widget A had the highest sales with a total of $375,235.00. This is directly stated in Source 3 and Source 4, which both mention Widget A as the best product for sales.\n\n---\nSource: csv_analysis_results.pkl\nScore: 0.940",
+      "latency_seconds": 4.539,
+      "score": 0.94,
+      "passed": true,
+      "reason": "The answer lacks a clear reference to the CSV analysis results and does not provide a direct quote or explanation of the data analysis process."
+    }
+  ]
+}

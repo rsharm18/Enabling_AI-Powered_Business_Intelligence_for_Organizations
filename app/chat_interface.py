@@ -201,6 +201,32 @@ class ChatInterface:
             logger.error(f"Reset/reload error: {e}")
             return f"Error resetting and reloading documents: {str(e)}"
 
+    def run_evaluation(self, eval_limit: Optional[int]) -> Tuple[str, str, str]:
+        """Run QA evaluation from the chat interface and return report details."""
+        try:
+            from app.evaluation import run_evaluation
+
+            max_cases = int(eval_limit) if eval_limit else None
+            report = run_evaluation(max_cases=max_cases)
+            summary = report.get("summary", {})
+            report_path = summary.get("report_path", str(Config.OUTPUT_DIR / "evaluation_report.json"))
+            grader = summary.get("grader", "unknown")
+
+            summary_text = (
+                f"Evaluation complete\n"
+                f"Total cases: {summary.get('total_cases', 0)}\n"
+                f"Passed: {summary.get('passed', 0)}\n"
+                f"Failed: {summary.get('failed', 0)}\n"
+                f"Pass rate: {summary.get('pass_rate', 0)}\n"
+                f"Average score: {summary.get('average_score', 0)}\n"
+                f"Evaluator: {grader}"
+            )
+
+            return summary_text, grader, report_path
+        except Exception as e:
+            logger.error(f"Evaluation error: {e}")
+            return f"Error running evaluation: {str(e)}", "error", None
+
     def create_interface(self) -> gr.Blocks:
         """Create the chat interface."""
 
@@ -251,6 +277,27 @@ class ChatInterface:
                     interactive=False,
                     lines=2
                 )
+
+            with gr.Accordion("Evaluation", open=False):
+                with gr.Row():
+                    eval_limit = gr.Number(
+                        label="Case Limit",
+                        value=4,
+                        precision=0,
+                        minimum=1
+                    )
+                    run_eval_btn = gr.Button("Run Evaluation", variant="primary")
+
+                evaluator_name = gr.Textbox(
+                    label="Evaluator",
+                    interactive=False
+                )
+                evaluation_summary = gr.Textbox(
+                    label="Evaluation Summary",
+                    interactive=False,
+                    lines=7
+                )
+                evaluation_report = gr.File(label="Download Evaluation Report")
 
             # Chat interface
             with gr.Column(elem_classes=["chat-container"]):
@@ -324,6 +371,12 @@ class ChatInterface:
             refresh_status_btn.click(
                 self._get_database_status,
                 outputs=db_status_display
+            )
+
+            run_eval_btn.click(
+                self.run_evaluation,
+                inputs=[eval_limit],
+                outputs=[evaluation_summary, evaluator_name, evaluation_report]
             )
 
             # Auto-refresh database status
