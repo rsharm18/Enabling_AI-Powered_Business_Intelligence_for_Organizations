@@ -9,6 +9,7 @@ import os
 from langchain_huggingface import HuggingFaceEmbeddings
 from sentence_transformers import SentenceTransformer
 
+import config
 from app.config import Config
 from app.database import db
 

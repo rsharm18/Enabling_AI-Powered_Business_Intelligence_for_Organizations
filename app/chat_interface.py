@@ -86,7 +86,7 @@ class ChatInterface:
             
             if db_status['documents'] == 0 and db_status['chunks'] == 0:
                 response = ("I don't have any documents to search through. Please process some PDF documents first "
-                           "by using the document processing feature, or set DATA_LOAD=true in your environment "
+                           "by using the document processing feature, or set PRE_LOAD_DATA=true in your environment "
                            "and restart the application.")
                 return [{"role": "user", "content": message}, {"role": "assistant", "content": response}]
             

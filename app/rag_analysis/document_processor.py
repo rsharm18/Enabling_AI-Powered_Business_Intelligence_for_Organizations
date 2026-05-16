@@ -28,6 +28,8 @@ class DocumentProcessor:
         Args:
             data_directory: Directory containing PDF files
         """
+        if not Config.PRE_LOAD_DATA:
+            return
         self.data_directory = Path(data_directory) if data_directory else Config.DATA_DIR / 'PDF Folder'
         logger.info(f" Data directory: {self.data_directory}")
         self.text_splitter = RecursiveCharacterTextSplitter(
@@ -266,8 +268,8 @@ class DocumentProcessor:
             Number of documents processed
         """
         # Check if data loading is enabled
-        if not Config.DATA_LOAD:
-            logger.info("DATA_LOAD is set to False. Skipping PDF document processing.")
+        if not Config.PRE_LOAD_DATA:
+            logger.info("PRE_LOAD_DATA is set to False. Skipping PDF document processing.")
             return 0
         
         # Load documents

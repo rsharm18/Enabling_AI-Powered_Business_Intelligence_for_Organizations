@@ -336,16 +336,32 @@ class DatabaseManager:
         return self.execute_query(query, (query_embedding, limit))
     
     def search_similar_chunks(self, query_embedding: List[float], limit: int = 5, threshold: float = 0.7) -> List[Dict[str, Any]]:
+        # """Search for similar chunks using cosine similarity"""
+        # query = """
+        # SELECT dc.id, dc.chunk_text, dc.chunk_index, de.content as document_content,
+        #        1 - (dc.embedding <=> %s::vector) as similarity
+        # FROM document_chunks dc
+        # JOIN document_embeddings de ON dc.document_id = de.id
+        # WHERE 1 - (dc.embedding <=> %s::vector) > %s
+        # ORDER BY similarity DESC
+        # LIMIT %s;
+        # """
         """Search for similar chunks using cosine similarity"""
         query = """
-        SELECT dc.id, dc.chunk_text, dc.chunk_index, de.content as document_content,
-               1 - (dc.embedding <=> %s::vector) as similarity
-        FROM document_chunks dc
-        JOIN document_embeddings de ON dc.document_id = de.id
-        WHERE 1 - (dc.embedding <=> %s::vector) > %s
-        ORDER BY similarity DESC
-        LIMIT %s;
-        """
+                SELECT
+                    dc.id,
+                    dc.chunk_text,
+                    dc.chunk_index,
+                    de.content as document_content,
+                    de.metadata as document_metadata,
+                    1 - (dc.embedding <=> %s::vector) as similarity
+                FROM document_chunks dc
+                JOIN document_embeddings de ON dc.document_id = de.id
+                WHERE 1 - (dc.embedding <=> %s::vector) > %s
+                ORDER BY similarity DESC
+                LIMIT %s;
+            """
+
         return self.execute_query(query, (query_embedding, query_embedding, threshold, limit))
 
     def search_top_chunks(self, query_embedding: List[float], limit: int = 5) -> List[Dict[str, Any]]:
