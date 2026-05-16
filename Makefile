@@ -1,5 +1,7 @@
 .PHONY: help setup web csv process eval stop kill-port start-db stop-db clean
 
+PROJECT_ROOT := $(CURDIR)
+
 help:
 	@echo "AI-Powered Business Intelligence Platform - Make Commands"
 	@echo ""
@@ -28,7 +30,7 @@ web:
 		echo "Port 7860 is in use, killing process..."; \
 		kill -9 $$(lsof -ti:7860) 2>/dev/null || true; \
 	fi
-	@PYTHONPATH=/mnt/m/github_project/Python/Enabling_AI-Powered_Business_Intelligence_for_Organizations .venv/bin/python app/main.py --mode chat
+	@PYTHONPATH="$(PROJECT_ROOT)" .venv/bin/python app/main.py --mode chat
 
 debug:
 	@echo "Starting chat interface in lightweight debug mode..."
@@ -36,19 +38,19 @@ debug:
 		echo "Port 7860 is in use, killing process..."; \
 		kill -9 $$(lsof -ti:7860) 2>/dev/null || true; \
 	fi
-	@PYTHONPATH=/mnt/m/github_project/Python/Enabling_AI-Powered_Business_Intelligence_for_Organizations .venv/bin/python app/main.py --mode chat --debug-light
+	@PYTHONPATH="$(PROJECT_ROOT)" .venv/bin/python app/main.py --mode chat --debug-light
 
 csv:
 	@echo "Starting CSV analysis mode..."
-	@PYTHONPATH=/mnt/m/github_project/Python/Enabling_AI-Powered_Business_Intelligence_for_Organizations .venv/bin/python app/main.py --mode csv
+	@PYTHONPATH="$(PROJECT_ROOT)" .venv/bin/python app/main.py --mode csv
 
 process:
 	@echo "Starting document processing mode..."
-	@PYTHONPATH=/mnt/m/github_project/Python/Enabling_AI-Powered_Business_Intelligence_for_Organizations .venv/bin/python app/main.py --mode process
+	@PYTHONPATH="$(PROJECT_ROOT)" .venv/bin/python app/main.py --mode process
 
 eval:
 	@echo "Starting QA evaluation mode..."
-	@PYTHONPATH=/mnt/m/github_project/Python/Enabling_AI-Powered_Business_Intelligence_for_Organizations .venv/bin/python app/main.py --mode eval
+	@PYTHONPATH="$(PROJECT_ROOT)" .venv/bin/python app/main.py --mode eval
 
 stop:
 	@echo "Stopping application..."
