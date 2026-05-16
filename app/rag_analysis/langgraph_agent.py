@@ -1,6 +1,8 @@
 """LangGraph integration for conversational AI agent."""
 
 import logging
+from pathlib import Path
+import re
 from typing import List, Dict, Any, Optional, AsyncGenerator
 from langchain_core.messages import HumanMessage, AIMessage, SystemMessage
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
@@ -13,6 +15,7 @@ from typing_extensions import Annotated, TypedDict
 from app.config import Config
 from app.rag_analysis.vector_search import VectorSearch
 from app.rag_analysis.embedding_generator import EmbeddingGenerator
+from app.util.util import format_context
 
 # Try to import Groq
 try:
@@ -37,7 +40,7 @@ class AgentState(TypedDict):
 
 class ConversationalAgent:
     """Conversational AI agent using LangGraph with vector search."""
-    
+
     def __init__(self):
         """Initialize the conversational agent with lazy loading."""
         self.embedding_generator = None
@@ -46,7 +49,7 @@ class ConversationalAgent:
         self.graph = None
         self._components_initialized = False
         # Don't initialize immediately - will be loaded on first use
-    
+
     def _ensure_components_initialized(self):
         """Ensure components are initialized before use."""
         if not self._components_initialized:
@@ -55,7 +58,7 @@ class ConversationalAgent:
             self._build_graph()
             self._components_initialized = True
             logger.info("RAG components initialized successfully")
-    
+
     def _initialize_components(self):
         """Initialize RAG components."""
         try:
@@ -68,59 +71,51 @@ class ConversationalAgent:
                 self.llm = ChatGroq(
                     api_key=Config.GROQ_API_KEY,
                     model=Config.GROQ_MODEL,
-                    temperature=0.1
+                    temperature=0.1,
+                    max_tokens=Config.GROQ_MAX_TOKENS,
                 )
                 logger.info(f"Groq LLM initialized with model: {Config.GROQ_MODEL}")
             else:
                 logger.warning("Groq LLM not available. Using simple response generation.")
                 self.llm = None
-            
+
             logger.info("Agent components initialized successfully")
         except Exception as e:
             logger.error(f"Failed to initialize agent components: {e}")
             raise e
-    
+
     def _build_graph(self):
         """Build the LangGraph workflow."""
-        
+
+        def strip_model_source_footer(response: str) -> str:
+            """Remove model-generated source footer so the app emits one canonical footer."""
+            patterns = [
+                r"\n+\s*Source:\s*.+?\s*,?\s*score:\s*[0-9.]+\s*$",
+                r"\n+\s*Source:\s*.+?\n\s*Score:\s*[0-9.]+\s*$",
+            ]
+            cleaned = response.strip()
+            for pattern in patterns:
+                cleaned = re.sub(pattern, "", cleaned, flags=re.IGNORECASE | re.DOTALL).strip()
+            return cleaned
+
         # Define the nodes
         def retrieve_documents(state: AgentState) -> AgentState:
             """Retrieve relevant documents based on the query."""
             try:
                 query = state["messages"][-1].content if state["messages"] else ""
-                
+
                 # Perform vector search
                 results = self.vector_search.hybrid_search(query, limit=5)
-                
+
                 # Format context
-                if results:
-                    context_parts = []
-                    for i, result in enumerate(results, 1):
-                        result_type = result.get('type', 'document')
-                        similarity = result.get('similarity', 0)
-                        
-                        if result_type == 'document':
-                            content = result.get('content', '')
-                        else:
-                            content = result.get('chunk_text', '')
-                        
-                        # Truncate long content
-                        if len(content) > 4000:
-                            content = content[:4000] + "..."
-                        
-                        context_parts.append(f"[Source {i}] {content}")
-                    
-                    context = "\n\n".join(context_parts)
-                else:
-                    context = "No relevant documents found for this query."
-                
+                context = format_context(results)
                 return {
                     **state,
                     "context": context,
                     "search_results": results,
                     "query": query
                 }
-                
+
             except Exception as e:
                 logger.error(f"Error in retrieve_documents: {e}")
                 return {
@@ -136,31 +131,66 @@ class ConversationalAgent:
                 query = state["query"]
                 context = state["context"]
                 search_results = state["search_results"]
-                
+
                 # Use LLM if available, otherwise fall back to simple response
                 if self.llm and search_results:
                     # Create prompt for LLM
-                    prompt = f"""You are a helpful AI assistant for business intelligence and document analysis. 
-Using the provided context from documents, answer the user's question accurately and comprehensively.
+                    prompt = f"""
+You are InsightForge, a concise AI-powered Business Intelligence assistant.
 
-User Question: {query}
+User question:
+{query}
 
-Context from documents:
+Retrieved context:
 {context}
 
-Instructions:
-1. Answer the question based on the provided context
-2. If the context doesn't contain enough information, acknowledge this
-3. Provide a clear, well-structured response
-4. Include relevant details from the sources
-5. Be conversational and helpful
+Rules:
+1. Answer directly using only the retrieved context.
+2. Keep the answer concise (max 5 sentences unless more detail is requested).
+3. If one source directly answers the question, prioritize that source.
+4. Ignore unrelated retrieved context.
+5. Do not include a source, citation, relevance score, or footer line; the application adds that separately.
+6. If the answer is not present in the context, clearly say so.
 
-Answer:"""
-                    
+Answer:
+"""
+
                     # Generate response using LLM
                     llm_response = self.llm.invoke(prompt)
-                    response = llm_response.content
-                    
+                    response = strip_model_source_footer(llm_response.content)
+                    if search_results:
+                        top_result = search_results[0]
+
+                        metadata = (
+                                top_result.get("metadata")
+                                or top_result.get("document_metadata")
+                                or {}
+                        )
+
+                        source_path = metadata.get("source", "")
+
+                        source_name = (
+                                metadata.get("file_name")
+                                or metadata.get("source_name")
+                                or metadata.get("document_name")
+                                or metadata.get("title")
+                                or (Path(source_path).name if source_path else None)
+                                or metadata.get("analysis_section")
+                                or metadata.get("source_type")
+                                or "unknown_source"
+                        )
+
+                        score = top_result.get(
+                            "final_score",
+                            top_result.get("similarity", 0)
+                        )
+
+                        response += (
+                            f"\n\n---\n"
+                            f"Source: {source_name}\n"
+                            f"Score: {score:.3f}"
+                        )
+
                 else:
                     # Fallback to simple response generation
                     if not search_results:
@@ -172,36 +202,36 @@ Answer:"""
                         response_parts = []
                         response_parts.append(f"Based on the documents, here's what I found about '{query}':")
                         response_parts.append("")
-                        
+
                         for i, result in enumerate(search_results, 1):
                             result_type = result.get('type', 'document')
                             similarity = result.get('similarity', 0)
-                            
+
                             if result_type == 'document':
                                 content = result.get('content', '')
                             else:
                                 content = result.get('chunk_text', '')
-                            
+
                             # Truncate for display
                             if len(content) > 200:
                                 content = content[:200] + "..."
-                            
+
                             response_parts.append(f"{i}. [{result_type.title()}] (Relevance: {similarity:.3f})")
                             response_parts.append(f"   {content}")
                             response_parts.append("")
-                        
+
                         response_parts.append(f"Found {len(search_results)} relevant results. Would you like me to elaborate on any specific aspect?")
-                        
+
                         response = "\n".join(response_parts)
-                
+
                 # Add AI message to the state
                 ai_message = AIMessage(content=response)
-                
+
                 return {
                     **state,
                     "messages": state["messages"] + [ai_message]
                 }
-                
+
             except Exception as e:
                 logger.error(f"Error in generate_response: {e}")
                 error_message = AIMessage(content=f"Sorry, I encountered an error: {str(e)}")
@@ -228,12 +258,12 @@ Answer:"""
         #     }
         # Build the graph
         workflow = StateGraph(AgentState)
-        
+
         # Add nodes
         # workflow.add_node("classify", classify_question)
         workflow.add_node("retrieve", retrieve_documents)
         workflow.add_node("generate", generate_response)
-        
+
         # Add edges
         # workflow.set_entry_point("classify")
         # workflow.add_conditional_edge(
@@ -248,20 +278,20 @@ Answer:"""
         workflow.add_edge("retrieve", "generate")
         # workflow.add_edge("analyze_csv", "generate")
         workflow.add_edge("generate", END)
-        
+
         # Compile the graph
         self.graph = workflow.compile()
         logger.info("LangGraph workflow built successfully")
-    
+
     def chat(self, message: str, history: List[List[str]] = None) -> str:
         """Process a chat message and return the response."""
         try:
             # Ensure components are initialized before use
             self._ensure_components_initialized()
-            
+
             # Convert history to LangChain messages
             messages = []
-            
+
             # Add system message
             system_msg = SystemMessage(content=(
                 "You are a helpful AI assistant for business intelligence and document analysis. "
@@ -269,38 +299,62 @@ Answer:"""
                 "If no relevant information is found, acknowledge this and suggest alternatives."
             ))
             messages.append(system_msg)
-            
+
             # Add conversation history
             if history:
                 for item in history:
                     # Handle both list format [human_msg, ai_msg] and dict format
                     if isinstance(item, (list, tuple)) and len(item) >= 2:
                         human_msg, ai_msg = item[0], item[1]
-                        messages.append(HumanMessage(content=human_msg))
-                        messages.append(AIMessage(content=ai_msg))
+                        messages.append(HumanMessage(content=self._content_to_text(human_msg)))
+                        messages.append(AIMessage(content=self._content_to_text(ai_msg)))
                     elif isinstance(item, dict) and 'role' in item and 'content' in item:
                         if item['role'] == 'user':
-                            messages.append(HumanMessage(content=item['content']))
+                            messages.append(HumanMessage(content=self._content_to_text(item['content'])))
                         elif item['role'] == 'assistant':
-                            messages.append(AIMessage(content=item['content']))
-            
+                            messages.append(AIMessage(content=self._content_to_text(item['content'])))
+
             # Add current message
             messages.append(HumanMessage(content=message))
-            
+
             # Run the graph
             result = self.graph.invoke({"messages": messages})
-            
+
             # Extract the last AI message
             ai_messages = [msg for msg in result["messages"] if isinstance(msg, AIMessage)]
             if ai_messages:
                 return ai_messages[-1].content
             else:
                 return "I'm sorry, I couldn't generate a response."
-                
+
         except Exception as e:
             logger.error(f"Error in chat processing: {e}")
             return f"Sorry, I encountered an error: {str(e)}"
-    
+
+    def _content_to_text(self, content: Any) -> str:
+        """Normalize Gradio 6 message content blocks to plain text for LangChain messages."""
+        if isinstance(content, str):
+            return content
+
+        if isinstance(content, list):
+            parts = []
+            for block in content:
+                if isinstance(block, str):
+                    parts.append(block)
+                elif isinstance(block, dict):
+                    if block.get("type") == "text":
+                        parts.append(str(block.get("text", "")))
+                    elif block.get("type") == "file":
+                        file_info = block.get("file") or {}
+                        file_path = file_info.get("path") or file_info.get("name") or ""
+                        if file_path:
+                            parts.append(f"[uploaded file: {Path(file_path).name}]")
+                    elif "content" in block:
+                        parts.append(str(block.get("content", "")))
+            return "\n".join(part for part in parts if part).strip()
+
+        return str(content)
+
     def get_search_stats(self) -> Dict[str, Any]:
         """Get statistics about the search capabilities."""
         try:

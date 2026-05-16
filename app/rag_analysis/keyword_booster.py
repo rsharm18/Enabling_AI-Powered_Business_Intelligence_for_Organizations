@@ -1,6 +1,8 @@
 import re
 from typing import Dict, List, Any
 
+import logging
+log = logging.getLogger(__name__)
 
 def _is_bi_query( query: str) -> bool:
     bi_keywords = {
@@ -83,5 +85,5 @@ def calculate_keyword_boost( query: str, result: Dict[str, Any]) -> float:
                 or analysis_section
         ):
             boost += 0.45
-
+    log.debug(f">>> Keyword boost: {min(boost, 0.90)}")
     return min(boost, 0.90)
